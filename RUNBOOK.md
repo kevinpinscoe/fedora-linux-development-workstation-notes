@@ -1,3 +1,11 @@
+---
+title: RUNBOOK.md — fedora-notes (index)
+tags: [runbook, operations]
+vault_link: runbooks/home-kinscoe-fedora-notes.md
+source_path: /home/kinscoe/fedora-notes/RUNBOOK.md
+---
+
+> 📓 Indexed in the PKM knowledge vault at `runbooks/home-kinscoe-fedora-notes.md` (symlink → this file).
 # RUNBOOK.md — fedora-notes (index)
 
 ## Metadata

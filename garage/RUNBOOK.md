@@ -1,3 +1,11 @@
+---
+title: Garage RUNBOOK
+tags: [runbook, operations]
+vault_link: runbooks/home-kinscoe-fedora-notes-garage.md
+source_path: /home/kinscoe/fedora-notes/garage/RUNBOOK.md
+---
+
+> 📓 Indexed in the PKM knowledge vault at `runbooks/home-kinscoe-fedora-notes-garage.md` (symlink → this file).
 # Garage RUNBOOK
 
 Operational reference for the self-hosted Garage S3-compatible object store running in the `garage` Docker container on this host.

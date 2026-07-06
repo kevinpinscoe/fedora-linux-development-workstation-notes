@@ -1,3 +1,11 @@
+---
+title: RUNBOOK.md — Fedora KDE Plasma Desktop (kevin workstation)
+tags: [runbook, operations]
+vault_link: runbooks/home-kinscoe-fedora-notes-kde.md
+source_path: /home/kinscoe/fedora-notes/kde/RUNBOOK.md
+---
+
+> 📓 Indexed in the PKM knowledge vault at `runbooks/home-kinscoe-fedora-notes-kde.md` (symlink → this file).
 # RUNBOOK.md — Fedora KDE Plasma Desktop (kevin workstation)
 
 ## Metadata
