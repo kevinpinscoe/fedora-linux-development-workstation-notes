@@ -1,12 +1,12 @@
 ---
-title: RUNBOOK.md — fedora-notes (index)
+title: RUNBOOK.md — fedora-linux-development-workstation-notes (index)
 tags: [runbook, operations]
-vault_link: runbooks/home-kinscoe-fedora-notes.md
-source_path: /home/kinscoe/fedora-notes/RUNBOOK.md
+vault_link: runbooks/home-kinscoe-fedora-linux-development-workstation-notes.md
+source_path: /home/kinscoe/fedora-linux-development-workstation-notes/RUNBOOK.md
 ---
 
-> 📓 Indexed in the PKM knowledge vault at `runbooks/home-kinscoe-fedora-notes.md` (symlink → this file).
-# RUNBOOK.md — fedora-notes (index)
+> 📓 Indexed in the PKM knowledge vault at `runbooks/home-kinscoe-fedora-linux-development-workstation-notes.md` (symlink → this file).
+# RUNBOOK.md — fedora-linux-development-workstation-notes (index)
 
 ## Metadata
 
@@ -17,7 +17,7 @@ source_path: /home/kinscoe/fedora-notes/RUNBOOK.md
 | **Last Tested** | N/A — index only |
 | **Expected Duration** | N/A |
 | **Risk Level** | Low |
-| **Repo** | git@github.com:kevinpinscoe/fedora-notes.git |
+| **Repo** | git@github.com:kevinpinscoe/fedora-linux-development-workstation-notes.git |
 
 ---
 

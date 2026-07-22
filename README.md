@@ -1,4 +1,4 @@
-# fedora-notes
+# fedora-linux-development-workstation-notes
 
 Personal notes, observations, and fixes for a **Fedora Linux** developer workstation and desktop running **KDE Plasma 6**.
 
@@ -17,7 +17,7 @@ Personal notes, observations, and fixes for a **Fedora Linux** developer worksta
 ## Repository layout
 
 ```
-fedora-notes/
+fedora-linux-development-workstation-notes/
 ├── CLAUDE.md                 # Repo conventions + system context (for coding assistants)
 ├── README.md                  # Repo index (this file)
 ├── RUNBOOK.md                 # Root runbook index → points to subdirectory runbooks
