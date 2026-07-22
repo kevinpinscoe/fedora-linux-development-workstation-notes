@@ -666,6 +666,7 @@ sudo journalctl -k | grep -i "amdgpu\|gpu.*fault\|drm.*error" | tail -20
 - [x] Create RUNBOOK.md files for the 7 containers that were missing them — DONE 2026-04-26 (actualbudget, excalidraw, karakeep, n8n, pastebooks, wikijs, youtrack)
 - [x] Add Fedora 43 upgrade notes to existing RUNBOOK.md files — DONE 2026-04-26 (convertx, filestash, garage, gitea, glean, home_file_server, kroki, openbao, rsshub, woodpecker-ci)
 - [ ] Run `sudo dnf distro-sync` to realign any 3rd-party packages to F43 equivalents
-- [ ] **Bump Fedora version references from 42 → 43** now that the FLDW is actually on F43. This was deliberately deferred during the 2026-07-22 `fedora/` → `FLDW/` rename because the host was still on F42, and `~/ai/me.md` must reflect real state:
-  - `~/ai/me.md` — change "Fedora Linux 42" → "Fedora Linux 43" in the *Systems and Environments* section (this is the one file confirmed correct at F42 today; it needs the bump post-upgrade).
-  - Confirm `~/ai/directives/kevins-federated-unix-universe.md` and the service catalog (`~/Projects/private/fedora-dashboard/kevins-federated-unix-universe-services.md`) still read "Fedora Linux 43" — both were set ahead of the upgrade, so post-upgrade they simply become accurate (no edit expected, just verify).
+- [ ] **Bump Fedora version references from 42 → 43** now that the FLDW is actually on F43. This was deliberately deferred during the 2026-07-22 `fedora/` → `FLDW/` rename because the host was still on F42; on 2026-07-22 all three source-of-truth files were aligned to F42 so they match the live host until the upgrade actually happens. Change "Fedora Linux 42" → "Fedora Linux 43" in each:
+  - `~/ai/me.md` — *Systems and Environments* section.
+  - `~/ai/directives/kevins-federated-unix-universe.md` — the `FLDW` row in the Home table and the `FLDW` *Host-specific parameters* Description (two spots).
+  - Service catalog `~/Projects/private/fedora-dashboard/kevins-federated-unix-universe-services.md` — the `kevin.network.kevininscoe.com` FLDW fleet-host row (commit + push the `fedora-dashboard` repo per its own rule).
