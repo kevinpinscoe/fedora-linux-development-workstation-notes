@@ -21,6 +21,7 @@ fedora-linux-development-workstation-notes/
 ├── CLAUDE.md                 # Repo conventions + system context (for coding assistants)
 ├── README.md                  # Repo index (this file)
 ├── RUNBOOK.md                 # Root runbook index → points to subdirectory runbooks
+├── TODO.md                    # Open host tasks (Glean decommission)
 ├── SELINUX_SETUP.md           # SELinux + container labeling notes and fixes
 ├── fedora-42-to-43-upgrade/   # In-place upgrade notes (Fedora 42 → 43)
 │   ├── FEDORA-UPGRADE-43.md              # Full upgrade checklist (pre-upgrade → QA sign-off)
@@ -54,6 +55,11 @@ Operational runbooks are indexed by the root [`RUNBOOK.md`](RUNBOOK.md):
 |---------|--------|
 | [`kde/RUNBOOK.md`](kde/RUNBOOK.md) | KDE Plasma desktop — Plasma/KWin recovery, global shortcuts (incl. the `Meta+N` Obsidian quick-capture into the `~/notes` vault), KRunner, and session plumbing |
 | [`garage/RUNBOOK.md`](garage/RUNBOOK.md) | Garage S3-compatible object storage backend |
+
+## Open tasks
+
+Outstanding host work is tracked in [`TODO.md`](TODO.md) — currently the Glean decommission
+(the stack is still running despite being reported as retired).
 
 ## Key issues documented
 
