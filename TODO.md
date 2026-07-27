@@ -19,6 +19,7 @@ running on this host. Nothing has actually been torn down.
 | DNS / vhosts | `glean.kevininscoe.com`, `glean-admin.kevininscoe.com` — live in `/etc/httpd/conf.d/ssl.conf` (lines ~471–510) |
 | Docker volumes | `glean_postgres_data`, `glean_redis_data`, `glean_glean_logs`, `glean_postgres_test_data`, `glean_redis_test_data`, plus legacy `glean_milvus_data`, `glean_milvus_etcd_data`, `glean_milvus_minio_data` |
 | Service catalog | Both FQDNs present, status `TBD` |
+| Backups | `/etc/cron.d/glean-backup` — 02:30 daily `pg_dump` to `/home/backups/glean/` (~135 MB/dump, 10-day retention). **Cron, not systemd**, so no catch-up: the 2026-07-27 run was skipped entirely because the host was down |
 | On-disk | `/opt/containers/glean/` (compose, `.env`, `RUNBOOK.md`, `backup-glean.sh`, `scripts/`) and source repo `~/Projects/glean` |
 
 The `glean-purge.service` `203/EXEC` failure is resolved — the units were removed rather than
@@ -29,7 +30,9 @@ relabeled, since Glean is going away.
 - [ ] Confirm Glean is genuinely being retired, and export/preserve any wanted data (OPML feed list, starred/bookmarked articles) before anything is deleted
 - [x] Remove the purge job — 2026-07-27: `glean-purge.timer` disabled, both unit files deleted from `/etc/systemd/system/`, daemon reloaded. Verified: no glean timers scheduled, no failed glean units. `/opt/containers/glean/RUNBOOK.md` updated to record that automated cleanup is gone.
 - [ ] Stop and disable the stack: `sudo systemctl disable --now glean.service`, then delete `/etc/systemd/system/glean.service` and reload
-- [ ] Take a final backup snapshot of the Docker volumes (`backup-glean.sh`) and verify it is readable before destroying anything
+- [ ] Take a final backup (`sudo bash /opt/containers/glean/backup-glean.sh`) and verify it is readable before destroying anything. Note the nightly cron backup at 02:30 **skipped 2026-07-27** — the host was down after the power failure and cron has no catch-up — so the newest dump is `glean-20260726-023000.sql.gz`
+- [ ] Remove `/etc/cron.d/glean-backup` (the 02:30 nightly `pg_dump`) and decide the fate of the dumps in `/home/backups/glean/` (~135 MB each, 10-day retention)
+- [ ] Remove the now-empty leftover `/backups/` directory if nothing else uses it
 - [ ] Tear down containers and volumes: `cd /opt/containers/glean && sudo docker compose down -v` (this also clears the legacy `milvus` volumes if still attached; remove any orphans with `docker volume rm`)
 - [ ] Remove the two Apache vhosts from `/etc/httpd/conf.d/ssl.conf`, then `sudo apachectl configtest` and reload
 - [ ] Retire the TLS cert coverage for `glean.kevininscoe.com` and `glean-admin.kevininscoe.com` (see `~/admin/certbot-request.sh`)

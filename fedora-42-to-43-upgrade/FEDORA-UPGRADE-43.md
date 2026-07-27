@@ -80,7 +80,7 @@ Run each timer that has not fired recently:
 - [ ] `sudo systemctl start pastebooks-backup.service` (includes MySQL dump)
 - [ ] `sudo systemctl start gitea-backup.service`
 - [ ] `sudo systemctl start garage-backup.service`
-- [ ] `sudo bash /opt/containers/glean/backup-glean.sh` — Glean has no backup *service*; this was `glean-purge.service` until 2026-07-27, which ran a purge rather than a backup, and that unit has since been removed
+- [ ] `sudo bash /opt/containers/glean/backup-glean.sh` — Glean's backup runs from `/etc/cron.d/glean-backup` (02:30 daily), not a systemd unit; this line was `glean-purge.service` until 2026-07-27, which ran a purge rather than a backup, and that unit has since been removed
 - [ ] `sudo systemctl start kroki-backup.service`
 - [ ] `sudo systemctl start convertx-backup.service`
 - [ ] `sudo systemctl start openbao-backup.service`
