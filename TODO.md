@@ -13,21 +13,21 @@ running on this host. Nothing has actually been torn down.
 |------|-------|
 | Containers | `glean-web`, `glean-worker`, `glean-admin`, `glean-backend`, `glean-postgres`, `glean-redis` — all **Up** and healthy |
 | `glean.service` | **enabled** (starts the stack at boot via `docker compose up -d`) |
-| `glean-purge.timer` | **enabled**, next trigger 23:00 nightly |
-| `glean-purge.service` | **failed** (`203/EXEC`) — SELinux denies `init_t` execute on `glean-purge-articles.sh` (labeled `container_file_t`) |
+| `glean-purge.timer` | ~~enabled, 23:00 nightly~~ — **removed 2026-07-27** |
+| `glean-purge.service` | ~~failed (`203/EXEC`)~~ — **removed 2026-07-27**. No automated article cleanup runs any more. |
 | Ports | `28805` (glean-web), `28806` (glean-admin) — both bound to `127.0.0.1` |
 | DNS / vhosts | `glean.kevininscoe.com`, `glean-admin.kevininscoe.com` — live in `/etc/httpd/conf.d/ssl.conf` (lines ~471–510) |
 | Docker volumes | `glean_postgres_data`, `glean_redis_data`, `glean_glean_logs`, `glean_postgres_test_data`, `glean_redis_test_data`, plus legacy `glean_milvus_data`, `glean_milvus_etcd_data`, `glean_milvus_minio_data` |
 | Service catalog | Both FQDNs present, status `TBD` |
 | On-disk | `/opt/containers/glean/` (compose, `.env`, `RUNBOOK.md`, `backup-glean.sh`, `scripts/`) and source repo `~/Projects/glean` |
 
-The `glean-purge.service` failure resolves itself once the units are removed in step 2 —
-no SELinux relabel is needed if Glean is going away.
+The `glean-purge.service` `203/EXEC` failure is resolved — the units were removed rather than
+relabeled, since Glean is going away.
 
 ### Steps
 
 - [ ] Confirm Glean is genuinely being retired, and export/preserve any wanted data (OPML feed list, starred/bookmarked articles) before anything is deleted
-- [ ] Remove the purge job: `sudo systemctl disable --now glean-purge.timer`, then delete `/etc/systemd/system/glean-purge.{service,timer}` and `sudo systemctl daemon-reload`
+- [x] Remove the purge job — 2026-07-27: `glean-purge.timer` disabled, both unit files deleted from `/etc/systemd/system/`, daemon reloaded. Verified: no glean timers scheduled, no failed glean units. `/opt/containers/glean/RUNBOOK.md` updated to record that automated cleanup is gone.
 - [ ] Stop and disable the stack: `sudo systemctl disable --now glean.service`, then delete `/etc/systemd/system/glean.service` and reload
 - [ ] Take a final backup snapshot of the Docker volumes (`backup-glean.sh`) and verify it is readable before destroying anything
 - [ ] Tear down containers and volumes: `cd /opt/containers/glean && sudo docker compose down -v` (this also clears the legacy `milvus` volumes if still attached; remove any orphans with `docker volume rm`)
