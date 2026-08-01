@@ -2,44 +2,59 @@
 
 Human-owned task list for this host. Delete this file once every item is checked off.
 
-## Decommission Glean
+## Research: kernel 7.x on the Radeon PRO WX 7100 (GCN4)
 
-**Raised:** 2026-07-27 — Glean was reported as decommissioned, but it is still fully
-running on this host. Nothing has actually been torn down.
+**Raised:** 2026-08-01, during the Fedora 42 → 43 upgrade prep.
+**Status:** open — this is the largest unresearched risk carried into F43.
 
-**Current state (verified 2026-07-27):**
+### What the concern is, plainly
 
-| Item | State |
-|------|-------|
-| Containers | `glean-web`, `glean-worker`, `glean-admin`, `glean-backend`, `glean-postgres`, `glean-redis` — all **Up** and healthy |
-| `glean.service` | **enabled** (starts the stack at boot via `docker compose up -d`) |
-| `glean-purge.timer` | ~~enabled, 23:00 nightly~~ — **removed 2026-07-27** |
-| `glean-purge.service` | ~~failed (`203/EXEC`)~~ — **removed 2026-07-27**. No automated article cleanup runs any more. |
-| Ports | `28805` (glean-web), `28806` (glean-admin) — both bound to `127.0.0.1` |
-| DNS / vhosts | `glean.kevininscoe.com`, `glean-admin.kevininscoe.com` — live in `/etc/httpd/conf.d/ssl.conf` (lines ~471–510) |
-| Docker volumes | `glean_postgres_data`, `glean_redis_data`, `glean_glean_logs`, `glean_postgres_test_data`, `glean_redis_test_data`, plus legacy `glean_milvus_data`, `glean_milvus_etcd_data`, `glean_milvus_minio_data` |
-| Service catalog | Both FQDNs present, status `TBD` |
-| Backups | `/etc/cron.d/glean-backup` — 02:30 daily `pg_dump` to `/home/backups/glean/` (~135 MB/dump, 10-day retention). **Cron, not systemd**, so no catch-up: the 2026-07-27 run was skipped entirely because the host was down |
-| On-disk | `/opt/containers/glean/` (compose, `.env`, `RUNBOOK.md`, `backup-glean.sh`, `scripts/`) and source repo `~/Projects/glean` |
+The kernel is the part of Linux that drives the hardware, including the `amdgpu` driver for the
+graphics card. This upgrade moves the kernel **from 6.19.14 straight to 7.1.x in a single step**,
+because Fedora 43's updates repo ships kernel 7.1.5.
 
-The `glean-purge.service` `203/EXEC` failure is resolved — the units were removed rather than
-relabeled, since Glean is going away.
+A normal Fedora upgrade nudges the kernel a little — 6.19 to 6.20. This one crosses from the 6.x
+series into 7.x. The major-number bump does not by itself mean "breaking change" (Linus rolls the
+number over when the minor number gets large), but **a jump this wide lands many releases' worth of
+driver changes at once** instead of letting them arrive gradually.
 
-### Steps
+The specific worry is the card's age. The **Radeon PRO WX 7100** is a 2016 part on AMD's **GCN4
+(Polaris)** architecture. Old GPUs get the least testing — AMD's attention is on current hardware,
+GCN-era support occasionally regresses, and cards are eventually moved to "legacy" status where
+they stop receiving fixes.
 
-- [ ] Confirm Glean is genuinely being retired, and export/preserve any wanted data (OPML feed list, starred/bookmarked articles) before anything is deleted
-- [x] Remove the purge job — 2026-07-27: `glean-purge.timer` disabled, both unit files deleted from `/etc/systemd/system/`, daemon reloaded. Verified: no glean timers scheduled, no failed glean units. `/opt/containers/glean/RUNBOOK.md` updated to record that automated cleanup is gone.
-- [ ] Stop and disable the stack: `sudo systemctl disable --now glean.service`, then delete `/etc/systemd/system/glean.service` and reload
-- [ ] Take a final backup (`sudo bash /opt/containers/glean/backup-glean.sh`) and verify it is readable before destroying anything. Note the nightly cron backup at 02:30 **skipped 2026-07-27** — the host was down after the power failure and cron has no catch-up — so the newest dump is `glean-20260726-023000.sql.gz`
-- [ ] Remove `/etc/cron.d/glean-backup` (the 02:30 nightly `pg_dump`) and decide the fate of the dumps in `/home/backups/glean/` (~135 MB each, 10-day retention)
-- [ ] Remove the now-empty leftover `/backups/` directory if nothing else uses it
-- [ ] Tear down containers and volumes: `cd /opt/containers/glean && sudo docker compose down -v` (this also clears the legacy `milvus` volumes if still attached; remove any orphans with `docker volume rm`)
-- [ ] Remove the two Apache vhosts from `/etc/httpd/conf.d/ssl.conf`, then `sudo apachectl configtest` and reload
-- [ ] Retire the TLS cert coverage for `glean.kevininscoe.com` and `glean-admin.kevininscoe.com` (see `~/admin/certbot-request.sh`)
-- [ ] Delete the `glean` and `glean-admin` DNS records at Linode
-- [ ] Release ports `28805` and `28806` per the `portman.md` directive
-- [ ] Update the service catalog (`~/Projects/private/fedora-dashboard/kevins-federated-unix-universe-services.md`) per the `service-catalog.md` directive — remove or mark both FQDNs decommissioned
-- [ ] Remove the Homepage dashboard tile for Glean, if present
-- [ ] Archive or delete `/opt/containers/glean/` and decide the fate of `~/Projects/glean`
-- [ ] Log the decommission in `~/ai/fedora/CHANGELOG.md` and commit in `~/ai`
-- [ ] Update `fedora-42-to-43-upgrade/notes-container-inventory.md` — the container count drops from 17
+**"Unresearched" means the evidence is absent, not bad.** No reports were found of the WX 7100
+working well on 7.1, and none were found of it breaking. Nobody appears to have written it down.
+
+### What failure would look like
+
+- Screen artifacts, or the desktop freezing / the compositor restarting
+- GPU hangs or resets in `journalctl -k`
+- Everything becoming very slow because rendering fell back to software
+
+### The safety net already in place
+
+Kernel `6.19.14-108.fc42` stays installed and stays selectable in GRUB. If 7.1.x misbehaves,
+reboot, pick the old kernel, and the machine is back to its pre-upgrade behaviour. Do not let
+`dnf autoremove` or a low `installonly_limit` reap the F42 kernels until 7.1.x has proven itself.
+
+### Tasks
+
+- [ ] Search for GCN4 / Polaris regression reports against kernel 7.x — the canonical place is
+      [drm/amd GitLab issues](https://gitlab.freedesktop.org/drm/amd/-/issues); also check the
+      Fedora Discussion forum and the `amd-gfx` mailing list
+- [ ] Confirm whether GCN4 / Polaris is still fully supported in 7.x, or has been moved toward
+      legacy handling
+- [ ] Record the running kernel version and any GPU log entries after the upgrade
+      (`uname -r`; `sudo journalctl -k | grep -i 'amdgpu\|gpu.*fault\|drm.*error'`)
+- [ ] Watch for 30+ minutes of real use, including something GPU-intensive, per QA-12 in
+      `fedora-42-to-43-upgrade/FEDORA-UPGRADE-43.md`
+- [ ] Write the finding back into the upgrade checklist so the next upgrade inherits the answer
+      rather than the question
+
+---
+
+> **Glean's decommission moved out of this file on 2026-08-01.** It now lives in
+> `/opt/containers/TODO.md`, with the containers repo that manages it. Glean was stopped and
+> disabled before the F43 upgrade; its data is intact, and the open question is whether the stored
+> articles need keeping.

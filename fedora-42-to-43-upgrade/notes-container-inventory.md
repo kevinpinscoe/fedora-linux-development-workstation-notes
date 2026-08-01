@@ -15,6 +15,10 @@ not survive a reboot on their own.
 
 **Totals at 2026-07-31:** 44 Compose stacks, 73 running containers.
 
+> **Update 2026-08-01:** Glean was stopped and disabled before the Fedora 43 upgrade — its six
+> containers are down and its unit is disabled, leaving **67 running**. Nothing was destroyed: the
+> unit file, all eight volumes, and `/opt/containers/glean/` are retained. See `/opt/containers/TODO.md`.
+
 Kasm Workspaces 1.18.1 is at `/opt/kasm` — NOT in `/opt/containers`, and **currently down and
 disabled** (all 8 containers exited, `kasm.service` disabled).
 
@@ -29,7 +33,7 @@ These start at boot. 21 stacks.
 | excalidraw | yes | — |
 | garage | yes | garage-backup |
 | gitea-act-runner | yes | — |
-| glean | yes | *cron, not a timer* |
+| ~~glean~~ | yes | *cron, not a timer* — **stopped and disabled 2026-08-01** |
 | ingest | yes | — |
 | karakeep | yes | karakeep-backup |
 | kroki | yes | kroki-backup |
@@ -119,12 +123,13 @@ sudo grep -rl 'label:disable' /opt/containers/*/docker-compose.y*ml \
 - **Kasm Workspaces 1.18.1** at `/opt/kasm` — `kasm_proxy`, `kasm_rdp_https_gateway`,
   `kasm_rdp_gateway`, `kasm_agent`, `kasm_manager`, `kasm_api`, `kasm_guac`, `kasm_db`.
   **All exited; `kasm.service` disabled.**
-- **pcm-ingest**, **pcm-perlite**, **pcm-perlite-web** — PCM vault stack (ports 3023, 3024)
+- **pcm-ingest**, **pcm-perlite**, **pcm-perlite-web** — PCM vault stack
 - **incident-dev-postgres**, **incident-valkey** — dev containers, referenced by image ID only
 - **buildx_buildkit_builder0** — Docker buildx builder
 
 ## Pending changes
 
-- **Glean is being decommissioned** — see `TODO.md` at the repo root. When it goes, the stack count
-  drops from 44 to 43 and 6 containers leave the fleet.
+- **Glean is stopped and disabled** as of 2026-08-01, with all data retained. The decommission is
+  tracked in `/opt/containers/TODO.md`; the open question is whether its stored articles need
+  keeping. When it is finally torn down the stack count drops from 44 to 43.
 - **Kasm's fate is undecided** — it has been down since before the F43 upgrade.

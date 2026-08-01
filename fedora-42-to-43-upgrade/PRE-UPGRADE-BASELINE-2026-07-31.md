@@ -7,6 +7,18 @@ mistaken for upgrade damage.
 **Compare this file against the live host during QA. Anything already broken here is not the
 upgrade's fault.**
 
+> ### Deliberate changes made AFTER this snapshot, on 2026-08-01
+>
+> Two things below are intentionally no longer true. Do not treat either as upgrade damage:
+>
+> - **Salt was removed entirely** — `salt`, `salt-master`, `salt-minion` and all of `/etc/salt`,
+>   `/var/cache/salt`, `/var/log/salt`. Ports 4505/4506 no longer listen. It was outmoded and was
+>   also about to break on Python 3.14.
+> - **Glean was stopped and disabled** — its six containers are down and `glean.service` is
+>   disabled, so the running-container count is **67, not 73**. Nothing was destroyed: the unit
+>   file and all eight volumes are retained pending a decision on its stored articles.
+>   See `/opt/containers/TODO.md`.
+
 > **Redacted for publication.** This repository is public, so the port map and the list of stacks
 > running with SELinux confinement disabled are **not** in this copy. They live beside it in
 > `PRE-UPGRADE-BASELINE-2026-07-31.local.md`, which is gitignored and stays on the host. Use the

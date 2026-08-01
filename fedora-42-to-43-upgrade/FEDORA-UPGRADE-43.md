@@ -19,14 +19,15 @@
 | Question | Decision |
 |---|---|
 | Target release, given F42 is EOL and F44 is out | **Fedora 43**, as originally planned |
-| Salt is broken on F43 (see the Salt section below) | **Waived** — proceed and accept `salt-minion`/`salt-master` being non-functional |
+| Salt is broken on F43 (see the Salt section below) | **Resolved by removal** — Salt was uninstalled from this host on 2026-08-01 |
+| Glean, pending decommission | **Stopped and disabled** on 2026-08-01, data retained — out of the upgrade's blast radius |
 
 ### Two facts that changed since the April research
 
 1. **Fedora 42 is EOL.** Its updates repo has moved to `archives.fedoraproject.org`. The host has
    been running without updates, and Phase 1.1 below is now largely a no-op.
 2. **Fedora 44 is released.** F43 is therefore N-1 with a limited support window — expect to plan a
-   43 → 44 upgrade before long. F44 also carries a newer Salt (see below).
+   43 → 44 upgrade before long.
 
 ---
 
@@ -151,10 +152,12 @@ Local container/application backups:
 
 Not a systemd timer — run by hand:
 
-- [ ] `sudo bash /opt/containers/glean/backup-glean.sh` — Glean's backup is a **cron** job
-  (`/etc/cron.d/glean-backup`, 02:30 daily), not a systemd unit, so it has no catch-up and will be
-  **silently skipped if the host is down or mid-upgrade at 02:30** — exactly what happened on
-  2026-07-27. Take this one manually before starting. (Glean is pending decommission; see `TODO.md`.)
+- [x] `sudo bash /opt/containers/glean/backup-glean.sh` — **DONE 2026-08-01 08:18**.
+  `/home/backups/glean/glean-20260801-081833.sql.gz`, 144 MB, gzip verified, 42,776 lines.
+  Glean's backup is a **cron** job (`/etc/cron.d/glean-backup`, 02:30 daily), not a systemd unit, so
+  it has no catch-up and is silently skipped if the host is down at 02:30 — as happened 2026-07-27.
+  **Glean was then stopped and disabled** (`systemctl disable --now glean.service`); its unit file
+  and all eight Docker volumes are retained. Remaining teardown: `/opt/containers/TODO.md`.
 
 Off-host pulls and verifiers — lower priority for the upgrade, but note their state:
 
@@ -278,7 +281,7 @@ F43 ships DNF 5 (replaces DNF4/YUM). History DB is separate — packages install
 **Stacks with an enabled systemd unit** — these come back by themselves; restart if needed:
 
 ```bash
-for n in actualbudget convertx excalidraw garage gitea-act-runner glean ingest karakeep \
+for n in actualbudget convertx excalidraw garage gitea-act-runner ingest karakeep \
          kroki metabase n8n openbao pastebooks pkm reader rsshub wallabag watchtower \
          wikijs woodpecker-ci youtrack; do
   sudo systemctl restart "$n" 2>/dev/null || echo "no unit: $n"
@@ -296,7 +299,8 @@ done
 
 - [ ] All unit-managed stacks restarted
 - [ ] All unit-less stacks brought up manually
-- [ ] Container count is back to the baseline of **73 running**: `docker ps | wc -l`
+- [ ] Container count is back to **67 running** — the baseline was 73, minus Glean's six, which
+      were deliberately taken down on 2026-08-01 and must stay down
 - [ ] Check for exited containers: `docker ps --filter status=exited`
       (the 8 Kasm containers are expected to stay exited — see Phase 6)
 
@@ -305,7 +309,8 @@ done
 
 ### 5.2 Per-Container Checks
 
-> **Regenerated 2026-07-31.** The fleet is **44 Compose stacks / 73 running containers**, not the 17
+> **Regenerated 2026-07-31.** The fleet is **44 Compose stacks / 73 running containers** at baseline
+> (67 after Glean was taken down on 2026-08-01), not the 17
 > this table used to list. Port bindings are deliberately not published here — they are in
 > `PRE-UPGRADE-BASELINE-2026-07-31.local.md`, or run `docker ps --format '{{.Names}}\t{{.Ports}}'`.
 
@@ -328,7 +333,7 @@ done
 | gitea | UI reachable; SSH port answers | |
 | gitea-act-runner | runner + dind both up, registered | |
 | glance | UI reachable | |
-| glean | web + admin reachable (pending decommission) | |
+| ~~glean~~ | **Stopped and disabled 2026-08-01** — must NOT come back up | |
 | home_file_server | UI reachable | |
 | ingest | unit active; check its logs | |
 | karakeep | UI reachable; meilisearch + chrome up | |
@@ -385,7 +390,8 @@ sudo grep -rl 'label:disable' /opt/containers/*/docker-compose.y*ml \
 systemctl list-timers --all | grep -E 'backup|verify'
 ```
 - [ ] All **38** backup/verify timers are loaded and scheduled (full list in the baseline file)
-- [ ] `/etc/cron.d/glean-backup` still present and crond running (Glean's backup is cron, not systemd)
+- [ ] `/etc/cron.d/glean-backup` — still installed, but Glean is stopped, so it now dumps a dead
+      database and will start failing. Removing it is a task in `/opt/containers/TODO.md`.
 
 ---
 
@@ -404,7 +410,7 @@ Kasm Workspaces 1.18.1 lives at `/opt/kasm` and is NOT managed by dnf or docker-
 - [ ] **Decide Kasm's fate** — is it being retired, or does it need to come back? Nothing else in
       this checklist can be answered until that is settled.
 - [ ] If retiring: plan the teardown (ports, DNS, vhosts, service catalog) the same way as the
-      Glean decommission in `TODO.md`
+      Glean decommission in `/opt/containers/TODO.md`
 - [ ] If keeping: check F43 compatibility at https://www.kasmweb.com/docs/latest/release_notes.html,
       check for a newer release than 1.18.1, and follow Kasm's official upgrade procedure
 - [ ] If keeping, after the upgrade verify services are healthy:
@@ -424,7 +430,8 @@ Kasm Workspaces 1.18.1 lives at `/opt/kasm` and is NOT managed by dnf or docker-
 > **Re-assessment 2026-07-31:** the first two entries below are now **historical**. F43's kernel has
 > moved on from 6.17 to **7.1.5**, so neither the Docker/6.17-iptables issue nor the amdgpu 6.17.9
 > page-fault regression can be hit on this upgrade. They are kept for the record. The live concerns
-> are now the **Salt** entry further down and the **unresearched 6.19 → 7.1 kernel jump** (Phase 3.4).
+> The Salt entry further down was resolved on 2026-08-01 by removing Salt from the host outright, so
+> the only live concern is the **unresearched 6.19 → 7.1 kernel jump** (Phase 3.4).
 
 ### ~~BLOCKER~~ ~~CRITICAL~~ HISTORICAL — Docker CE + kernel 6.17 iptables — **cannot occur: F43 now ships kernel 7.1.5, and this host is already on engine 29.x**
 
@@ -548,36 +555,25 @@ Source: [System Upgrade to 43 fails due to WINE](https://discussion.fedoraprojec
 
 ---
 
-### WARNING — Salt / SaltStack broken on Fedora 43 (Python 3.14) — **still unfixed; ACCEPTED AS A KNOWN BREAKAGE 2026-07-31**
+### ~~WARNING~~ RESOLVED — Salt / SaltStack broken on Fedora 43 (Python 3.14) — **Salt removed from this host 2026-08-01**
 
-> ## Waiver — read this first
+> ## Resolved by removal — read this first
 >
-> This entry used to end with *"Do NOT upgrade this host to Fedora 43 until Salt Python 3.14 compat
-> is confirmed working."* **Kevin waived that stop-condition on 2026-07-31** and chose to proceed
-> with the F43 upgrade knowing Salt will break.
+> This entry was first a stop-condition ("do not upgrade until Salt works on Python 3.14"), then a
+> waiver. Neither applies now: **Salt was removed from this host entirely on 2026-08-01**, before the
+> upgrade, because it was outmoded. There is nothing left to break.
 >
-> **Re-verified 2026-07-31 — nothing has improved for F43:**
+> What was removed: `salt`, `salt-master`, and `salt-minion` (3007.5-2.fc42), plus `/etc/salt`,
+> `/var/cache/salt`, `/var/log/salt`, and the master's accepted minion key store. `dnf` also reaped
+> 31 orphaned dependencies, all clean — the only notable one being `dnf-utils`, a DNF 4 compat
+> package Fedora 43 drops anyway. Ports 4505/4506 are no longer listening and no salt units remain.
+> A safety archive was written to `/home_backup/salt-config-backup-20260801.tar.gz` (51 KB).
 >
-> | Check | Result |
-> |---|---|
-> | F43 stable **and** `updates-testing` | `salt-3007.6-3.fc43` — the exact broken build |
-> | F43 Python | 3.14.6 — the version that triggers the bug |
-> | This host installs | `salt`, `salt-master` **and** `salt-minion`, all 3007.5-2.fc42 |
-> | F44 | `salt-3007.8-4.fc44` — newer upstream (3007.8) plus a deprecated-`spwd` removal patch |
+> Nothing running was orphaned: the four minions the master knew (`dev-agents-1`, `dev-servers-1`,
+> `prod-agents-1`, `prod-servers-1`) are all on VMs that are shut off. Neither 4505 nor 4506 was
+> reserved in portman, so no `portman release` was needed. Logged in `~/ai/fedora/CHANGELOG.md`.
 >
-> **Expected outcome after the upgrade:** `salt-minion` on this host stops responding
-> (`salt '*' test.ping` → `[No response]`). The earlier note that "the Salt master is unaffected"
-> held only while the master ran on F42/Python 3.13 — after this upgrade the **master is also on
-> Python 3.14** and should be assumed affected until proven otherwise.
->
-> **Recovery paths, in order of preference:**
-> 1. Move to **F44**, which carries Salt 3007.8 (unverified as a fix, but it is the only newer build).
-> 2. Wait for a Fedora 43 Salt update past 3007.6-3 and `dnf upgrade salt salt-master salt-minion`.
-> 3. Manage the affected hosts over SSH/Ansible in the meantime.
->
-> - [ ] After the upgrade, confirm the actual Salt damage: `sudo systemctl status salt-master salt-minion`
->       and `sudo salt '*' test.ping`
-> - [ ] Record the result and decide between the recovery paths above
+> **Nothing to check during QA.** The detail below is kept only as the record of why Salt went.
 
 **Affects:** any host running `salt-minion` from the Fedora 43 repo (`salt-3007.6-3.fc43`).
 **Risk level: HIGH** if you manage this host or VMs it runs as Salt minions.
@@ -602,10 +598,9 @@ This is caused by Python 3.14 changing how `multiprocessing.popen_forkserver` pi
 2. **Wait for Salt upstream fix** — watch https://github.com/saltstack/salt for a Python 3.14 compat PR.
 3. **Skip Salt on short-lived k3s VMs** — these are rebuilt frequently; manage them via SSH/Ansible instead.
 
-**This host (kevin.kevininscoe.com, Fedora 42, Python 3.13):** Salt master is unaffected *while on F42*.
-~~Do NOT upgrade this host to Fedora 43 until Salt Python 3.14 compat is confirmed working.~~
-**Waived 2026-07-31** — see the waiver box at the top of this section. After the upgrade the master
-is on Python 3.14 as well and must be re-tested.
+**This host (kevin.kevininscoe.com):** ~~Do NOT upgrade this host to Fedora 43 until Salt Python
+3.14 compat is confirmed working.~~ **Moot — Salt was removed on 2026-08-01.** See the box at the
+top of this section.
 
 ---
 
@@ -697,7 +692,7 @@ sudo systemctl status snapd --no-pager
 sudo systemctl status docker --no-pager
 docker --version                                 # expect 29.6.2 (from moby-engine, not docker-ce)
 rpm -q moby-engine docker-cli docker-compose containerd.io
-sudo systemctl status salt-master salt-minion --no-pager   # expected to be broken — see the Salt waiver
+rpm -qa | grep -i '^salt' || echo 'salt absent — removed 2026-08-01, expected'
 ```
 
 - [ ] httpd running
@@ -705,7 +700,7 @@ sudo systemctl status salt-master salt-minion --no-pager   # expected to be brok
 - [ ] certbot-renew.timer active and scheduled
 - [ ] snapd running
 - [ ] Docker Engine running, `moby-engine` on 29.6.2-1.fc43
-- [ ] Salt breakage confirmed and recorded (expected — not a regression to chase)
+- [ ] Salt still absent (removed pre-upgrade — nothing to check)
 
 ### QA-3 — SELinux AVC Denials
 
@@ -727,11 +722,12 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' | sort
 docker ps --filter status=exited --format 'table {{.Names}}\t{{.Status}}'
 ```
 
-- [ ] Container count back to the baseline of **73 running**
+- [ ] Container count back to **67 running** (baseline 73, less Glean's six — down by design)
 - [ ] All expected containers show `Up` — none unexpectedly in `Exited` or `Restarting`
 - [ ] The 20 unit-less stacks were brought up by hand (Phase 5.1) — they do **not** auto-start
 - [ ] All 11 `label:disable` stacks running (list in the `.local.md` baseline — see Phase 5.3)
-- [ ] Expected exceptions: the 8 Kasm containers stay exited; `youtrack.corrupt-20260729` stays down
+- [ ] Expected exceptions, all by design: the 8 Kasm containers stay exited, Glean's six stay down,
+      and `youtrack.corrupt-20260729` stays down
 
 ### QA-5 — Container Health Endpoints
 
@@ -784,7 +780,7 @@ KR=$(docker port kroki-core 8000 | head -1)
 curl -sf -o /dev/null -w "%{http_code}" "http://$KR/graphviz/svg/eNpLyUwvSizIUHBXqPZIzcnJVwjPL8pJUQQAgKQIAA=="
 
 # databases behind the apps
-for c in glean-postgres metabase-postgres wallabag-db wikijs-db pastebooks-db; do
+for c in metabase-postgres wallabag-db wikijs-db pastebooks-db; do   # glean-postgres is down by design
   printf '%-20s %s\n' "$c" "$(sudo docker inspect -f '{{.State.Health.Status}}' $c 2>/dev/null)"
 done
 ```
@@ -925,28 +921,25 @@ lspci -k | grep -A3 -i vga
 - [ ] If instability occurs: record `uname -r`, then reboot into **`6.19.14-108.fc42`** from GRUB —
       the F42 kernels are the fallback, not 6.17.8 as this checklist used to say
 
-### QA-13 — Salt (expected broken)
+### QA-13 — Salt (removed — nothing to do)
 
-**[AI]** — this is a *confirmation* step, not a pass/fail. The breakage was accepted in advance.
+Salt was uninstalled on 2026-08-01, before the upgrade. This step is retained only so the QA
+numbering does not shift.
 
 ```bash
-sudo systemctl status salt-master salt-minion --no-pager
-rpm -q salt salt-master salt-minion              # expect 3007.6-3.fc43
-sudo salt '*' test.ping                          # expect [No response] from F43 minions
-sudo journalctl -u salt-minion -n 40 --no-pager | grep -i 'error\|traceback'
+rpm -qa | grep -i '^salt' || echo 'salt absent — expected'
 ```
 
-- [ ] Actual failure mode recorded (missing deps, `_args_for_getstate` crash, or unexpectedly working)
-- [ ] Whether the **master** is also affected on Python 3.14 — recorded
-- [ ] Recovery path chosen (F44 / wait for a fixed F43 build / manage over SSH)
+- [ ] Confirms absent — no further action
 
 ### QA Sign-off
 
 - [ ] All QA-1 through QA-13 checks passed (or failures documented with workarounds applied)
+      — note QA-10 (Kasm) and QA-13 (Salt) are both no-ops by design
 - [ ] Date/time of completed QA: _______________
 - [ ] Kernel version running: _______________
-- [ ] Container count vs. the baseline of 73: _______________
-- [ ] Salt status (expected broken): _______________
+- [ ] Container count (expect 67; baseline 73 less Glean's six): _______________
+- [ ] Salt absent (removed pre-upgrade): _______________
 - [ ] Any open issues: _______________
 
 ---
@@ -958,14 +951,14 @@ sudo journalctl -u salt-minion -n 40 --no-pager | grep -i 'error\|traceback'
 - [x] Add Fedora 43 upgrade notes to existing RUNBOOK.md files — DONE 2026-04-26 (convertx, filestash, garage, gitea, glean, home_file_server, kroki, openbao, rsshub, woodpecker-ci)
 - [ ] Run `sudo dnf distro-sync` to realign any 3rd-party packages to F43 equivalents
 - [ ] **Decide Kasm's fate** (Phase 6) — it has been down and disabled since before the upgrade
-- [ ] **Resolve Salt** — pick a recovery path from the waiver box (F44, wait for a fixed F43 build,
-      or manage the affected hosts over SSH/Ansible)
+- [x] **Salt** — removed from the host on 2026-08-01 rather than carried across the upgrade
 - [ ] **Plan the 43 → 44 upgrade.** F44 is already released, so F43 is N-1 with a limited support
       window — and F44 carries the newer Salt. Do not repeat the F42 situation of sitting on an EOL
       release.
 - [ ] Add systemd units for the 20 stacks that have none, or record deliberately that they are
       manual-start only (they did not survive this reboot without hand-holding)
-- [ ] Resume the Glean decommission in `TODO.md` — it is still fully running
+- [ ] Resume the Glean decommission — now tracked in `/opt/containers/TODO.md`. It is stopped and
+      disabled with all data intact; the open question is whether the stored articles need keeping.
 - [ ] **Bump Fedora version references from 42 → 43** now that the FLDW is actually on F43. This was deliberately deferred during the 2026-07-22 `fedora/` → `FLDW/` rename because the host was still on F42; on 2026-07-22 all three source-of-truth files were aligned to F42 so they match the live host until the upgrade actually happens. Change "Fedora Linux 42" → "Fedora Linux 43" in each:
   - `~/ai/me.md` — *Systems and Environments* section.
   - `~/ai/directives/kevins-federated-unix-universe.md` — the `FLDW` row in the Home table and the `FLDW` *Host-specific parameters* Description (two spots).

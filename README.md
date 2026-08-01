@@ -21,7 +21,7 @@ fedora-linux-development-workstation-notes/
 ├── CLAUDE.md                 # Repo conventions + system context (for coding assistants)
 ├── README.md                  # Repo index (this file)
 ├── RUNBOOK.md                 # Root runbook index → points to subdirectory runbooks
-├── TODO.md                    # Open host tasks (Glean decommission)
+├── TODO.md                    # Open host tasks (kernel 7.x / GCN4 GPU research)
 ├── SELINUX_SETUP.md           # SELinux + container labeling notes and fixes
 ├── fedora-42-to-43-upgrade/   # In-place upgrade notes (Fedora 42 → 43)
 │   ├── FEDORA-UPGRADE-43.md              # Full upgrade checklist (pre-upgrade → QA sign-off)
@@ -60,8 +60,10 @@ Operational runbooks are indexed by the root [`RUNBOOK.md`](RUNBOOK.md):
 
 ## Open tasks
 
-Outstanding host work is tracked in [`TODO.md`](TODO.md) — currently the Glean decommission
-(the stack is still running despite being reported as retired).
+Outstanding host work is tracked in [`TODO.md`](TODO.md) — currently researching whether kernel 7.x
+still supports the GCN4-era Radeon PRO WX 7100. Container-level work (the Glean decommission) moved
+to `/opt/containers/TODO.md` on 2026-08-01 (Glean is now stopped and disabled, with its data
+retained pending a decision on the stored articles).
 
 ## Key issues documented
 
