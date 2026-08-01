@@ -173,29 +173,38 @@ systemctl list-timers --all | grep -E 'backup|verify'
 - [ ] All expected timers show a recent last-run and a valid next-trigger
 
 ### 2.3 Snapshot /opt/containers Tree
-This is NOT covered by backup.sh and contains all compose files, configs, and secrets:
+This is NOT covered by backup.sh and contains all compose files, configs, and secrets.
+
+> **CORRECTED 2026-08-01 — do NOT write snapshots to `/home_backup`.** This section used to target
+> `/home_backup`, which is **wrong and silently destructive**: `~/bin/backup.sh` mirrors
+> `/home/ → /home_backup/` with `--delete` and no excludes, so anything authored in `/home_backup`
+> that does not exist under `/home` is erased on the next backup run. A snapshot taken there was
+> confirmed deleted within minutes. Write to **`/home/backups/`** instead — it lives on sda1 and is
+> then mirrored to `/home_backup` automatically, protecting it on both disks.
+
+```bash
+sudo rsync -a --delete --info=stats2 /opt/containers/ /home/backups/containers-snapshot-$(date +%Y%m%d)/
 ```
-sudo rsync -av --delete /opt/containers/ /home_backup/containers-snapshot-$(date +%Y%m%d)/
-```
-- [ ] Snapshot completed and size looks reasonable
+- [x] Snapshot completed 2026-08-01 — `/home/backups/containers-snapshot-20260801`, 16 GB,
+      55 entries, 27 `.env` files present; gitea and openbao compose files spot-checked
 
 ### 2.4 Snapshot Kasm
 Kasm is already stopped (all 8 containers exited, `kasm.service` disabled), so the snapshot is
 consistent by default — but take it anyway, since Phase 6 may end in a reinstall or removal.
+Same `/home/backups` correction as 2.3 applies.
+```bash
+sudo rsync -a --delete /opt/kasm/ /home/backups/kasm-snapshot-$(date +%Y%m%d)/
 ```
-sudo rsync -av --delete /opt/kasm/ /home_backup/kasm-snapshot-$(date +%Y%m%d)/
-```
-- [ ] Kasm snapshot completed
+- [x] Kasm snapshot completed 2026-08-01 — `/home/backups/kasm-snapshot-20260801`, 3.4 GB
 
 ### 2.5 Retain Extra Kernels in GRUB
-`/etc/dnf/dnf.conf` currently has no `installonly_limit` set, so the default of 3 applies and three
-F42 kernels are installed. Raising it means the known-good F42 kernels survive as fallback entries
-after the upgrade.
+Raising `installonly_limit` means the known-good F42 kernels survive as fallback entries after the
+upgrade. `/boot` measures ~103 MB per kernel set, so 5 kernels ≈ 825 MB of its 1.5 GB — it fits.
 
 ```bash
 echo 'installonly_limit=5' | sudo tee -a /etc/dnf/dnf.conf
 ```
-- [ ] `installonly_limit` raised
+- [x] `installonly_limit=5` set 2026-08-01
 - [ ] GRUB shows multiple kernel entries at boot (the F42 kernels are the fallback if F43's kernel
       misbehaves — see Phase 3.4)
 
@@ -203,11 +212,16 @@ echo 'installonly_limit=5' | sudo tee -a /etc/dnf/dnf.conf
 
 ## Phase 3 — The Upgrade
 
-### 3.1 Install the Upgrade Plugin
+### 3.1 Upgrade Plugin — NOT NEEDED on this host
+
+> **Corrected 2026-08-01.** `dnf-plugin-system-upgrade` is the **DNF 4** way. This host runs DNF 5,
+> where `system-upgrade` is a **built-in subcommand** — there is no plugin to install, and
+> `dnf5-plugin-system-upgrade` does not exist as a package.
+
+```bash
+sudo dnf system-upgrade --help   # confirms: clean | log | reboot | status | download
 ```
-sudo dnf install dnf-plugin-system-upgrade
-```
-- [ ] Plugin installed
+- [x] Verified 2026-08-01 — `dnf5 system-upgrade` is available with no install required
 
 ### 3.2 Download Fedora 43 Packages
 ```
@@ -677,9 +691,11 @@ systemctl --failed --no-pager                    # compare against the baseline 
 - [ ] F42 kernels still listed in GRUB as fallback
 - [ ] RPM 6.x confirmed (this is the meaningful package-stack change; DNF was already 5.x)
 - [ ] SELinux Enforcing
-- [ ] **Failed units — do not expect zero.** These were already failing before the upgrade:
-      `check-ai-skill-jobs`, `check-pcm-nightly-ingest`, `dnsmasq`, `github-poll-for-activity`,
-      plus ~10 `drkonqi-coredump-processor@*` instances. Only **new** names are upgrade damage.
+- [ ] **Failed units — do not expect zero.** Already failing immediately before the upgrade
+      (revised 2026-08-01): `check-ai-skill-jobs`, `check-changelog-roll`, `dnsmasq`,
+      `github-poll-for-activity`, ~10 `drkonqi-coredump-processor@*` instances, and a transient
+      `drill-execstartpost-*` test unit. `check-pcm-nightly-ingest` and `gitea-backup` were both
+      fixed on 2026-08-01 and **should not** reappear. Only **new** names are upgrade damage.
 
 ### QA-2 — Core System Services
 
@@ -834,7 +850,23 @@ for f in /opt/containers/*/backup.sh; do
 done
 ```
 
-All backup.sh files must show `bin_t` in their label. If any show `container_file_t`:
+> **Corrected 2026-08-01 — this check is overbroad as originally written.** Only scripts a unit
+> **executes directly** need `bin_t`. Units that invoke theirs as `/bin/bash <path>` need only read
+> access, and work fine at `container_file_t`; 9 backup scripts sit at `container_file_t` and back up
+> normally. Check the unit's `ExecStart` before "fixing" a label.
+>
+> This is exactly how `gitea-backup` broke on 2026-08-01: it is the only unit that directly execs a
+> script under `/opt/containers`, the script was rewritten on Jul 31 and inherited
+> `container_file_t` from the parent rule, and no `restorecon` followed. Note that a durable
+> `semanage fcontext` rule for it **already existed** — so the fix is `restorecon`, not `chcon`, and
+> plain `restorecon` will refuse (it reads the wrong label as an admin customization when the user
+> prefix is `unconfined_u`). Use `-F`:
+>
+> ```bash
+> sudo restorecon -F -v /opt/containers/<name>/<script>.sh
+> ```
+
+Scripts that a unit execs directly must show `bin_t`. If one shows `container_file_t`:
 
 ```bash
 sudo chcon -t bin_t /opt/containers/<name>/backup.sh

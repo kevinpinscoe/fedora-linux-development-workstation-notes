@@ -60,10 +60,16 @@ wrong on this host. Treat only *new* names as upgrade damage.
 | Unit | Note |
 |---|---|
 | `check-ai-skill-jobs.service` | Silent-fail check for the `~/ai/fedora` background skill jobs |
-| `check-pcm-nightly-ingest.service` | Health/deadman check for the PCM nightly ingest job |
+| `check-changelog-roll.service` | Health/deadman check for the FLDW CHANGELOG month roll |
 | `dnsmasq.service` | Failed at baseline |
 | `github-poll-for-activity.service` | Polls GitHub for stars/forks |
 | `drkonqi-coredump-processor@*.service` (10 instances) | KDE coredump handler noise — routinely present |
+| `drill-execstartpost-*.service` | Transient `systemd-run` test unit (`/bin/false`) — a monitoring drill, not a fault |
+
+**Revised 2026-08-01 11:45** — the list drifted during the day:
+- `check-pcm-nightly-ingest` was **fixed** and no longer fails
+- `check-changelog-roll` and the `drill-execstartpost-*` transient appeared
+- `gitea-backup` failed at 03:15 and was **fixed at 11:42** (SELinux label; see the checklist's QA-8)
 
 ## Kasm Workspaces — already down before the upgrade
 
