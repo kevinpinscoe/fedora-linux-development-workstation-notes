@@ -25,7 +25,8 @@ fedora-linux-development-workstation-notes/
 ├── SELINUX_SETUP.md           # SELinux + container labeling notes and fixes
 ├── fedora-42-to-43-upgrade/   # In-place upgrade notes (Fedora 42 → 43)
 │   ├── FEDORA-UPGRADE-43.md              # Full upgrade checklist (pre-upgrade → QA sign-off)
-│   ├── notes-container-inventory.md      # Inventory of all 17 Docker Compose services
+│   ├── PRE-UPGRADE-BASELINE-2026-07-31.md  # Host state captured the night before the upgrade
+│   ├── notes-container-inventory.md      # Inventory of the 44 Docker Compose stacks
 │   ├── notes-fedora43-upgrade-planning.md  # Research notes and key findings
 │   └── notes-system-profile.md           # Hardware, disk layout, and key services
 ├── kde/
@@ -45,7 +46,8 @@ Notes and a step-by-step checklist for the in-place upgrade from Fedora 42 to Fe
 | `FEDORA-UPGRADE-43.md` | Full upgrade checklist: pre-upgrade prep, backups, the upgrade itself, post-upgrade verification (OS, Docker, containers, SELinux, Snap, AMD GPU), and a QA sign-off matrix |
 | `notes-fedora43-upgrade-planning.md` | Research notes and key findings from planning the upgrade: breaking changes in F43 (DNF 5, RPM 6, glibc 2.42), Docker/container concerns, and known upgrade failure patterns |
 | `notes-system-profile.md` | Hardware inventory, disk layout, and key services on the host |
-| `notes-container-inventory.md` | Inventory of all 17 Docker Compose services in `/opt/containers`, including images, ports, backup timers, and RUNBOOK status |
+| `notes-container-inventory.md` | Inventory of the 44 Docker Compose stacks in `/opt/containers`, including which have systemd units, backup timers, and RUNBOOK status |
+| `PRE-UPGRADE-BASELINE-2026-07-31.md` | Snapshot of the host taken the night before the F43 upgrade — package versions, pre-existing failed units, container fleet, backup timers, third-party repo readiness. Compare against it during QA so pre-existing faults are not read as upgrade damage. Port and SELinux-confinement detail is held back in an untracked `.local.md` companion, since this repo is public. |
 
 ## Runbooks
 

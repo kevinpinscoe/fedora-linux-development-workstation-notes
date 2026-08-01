@@ -1,4 +1,7 @@
 **/resume.sh
+# Host-detail files kept on disk but never published — this repo is public.
+# Port maps, SELinux-confinement status, and similar reconnaissance detail live in *.local.md.
+**/*.local.md
 **/.DS_Store
 **/.claude
 **/.codex

@@ -1,57 +1,96 @@
 # Fedora 42 → 43 Upgrade Checklist
 
-**Target:** Week of 2026-04-28  
-**Host:** kevin.kevininscoe.com (Fedora 42 Adams, kernel 6.19.13-100.fc42.x86_64)  
-**Desktop:** KDE Plasma 6  
+**Target:** morning of 2026-08-01  
+**Host:** kevin.kevininscoe.com (Fedora 42 Adams, kernel 6.19.14-108.fc42.x86_64)  
+**Desktop:** KDE Plasma 6 (plasmashell 6.6.4)  
 **GPU:** AMD Radeon PRO WX 7100 (amdgpu, open-source only)
+
+> **Refreshed 2026-07-31** against the live host. The original checklist was researched in April 2026
+> and had drifted badly — container counts, kernel expectations, and the Docker packaging were all wrong.
+> A pre-upgrade snapshot lives in **[`PRE-UPGRADE-BASELINE-2026-07-31.md`](PRE-UPGRADE-BASELINE-2026-07-31.md)**.
+> Compare against it during QA so pre-existing faults are not mistaken for upgrade damage.
+>
+> This repository is public, so the port map and the list of SELinux-unconfined stacks are **not**
+> published. They live on the host in `PRE-UPGRADE-BASELINE-2026-07-31.local.md` (gitignored).
+> **Use the `.local.md` copy when actually running the QA pass** — it is the complete one.
+
+## Decisions taken before this upgrade (2026-07-31)
+
+| Question | Decision |
+|---|---|
+| Target release, given F42 is EOL and F44 is out | **Fedora 43**, as originally planned |
+| Salt is broken on F43 (see the Salt section below) | **Waived** — proceed and accept `salt-minion`/`salt-master` being non-functional |
+
+### Two facts that changed since the April research
+
+1. **Fedora 42 is EOL.** Its updates repo has moved to `archives.fedoraproject.org`. The host has
+   been running without updates, and Phase 1.1 below is now largely a no-op.
+2. **Fedora 44 is released.** F43 is therefore N-1 with a limited support window — expect to plan a
+   43 → 44 upgrade before long. F44 also carries a newer Salt (see below).
 
 ---
 
 ## Phase 1 — Pre-Upgrade Preparation
 
 ### 1.1 System Update
-- [ ] Fully update F42 first: `sudo dnf upgrade --refresh`
+> **F42 is EOL.** Its updates repo is archived, so this step will find little or nothing. Run it
+> anyway to confirm the package database is consistent, but do not treat "no updates" as a problem.
+
+- [ ] Attempt a final F42 update: `sudo dnf upgrade --refresh`
 - [ ] Reboot after kernel updates if any were installed
 - [ ] Confirm running kernel matches latest installed: `uname -r` vs `rpm -q kernel`
+  - Baseline: running `6.19.14-108.fc42`; installed `6.19.8-100`, `6.19.13-100`, `6.19.14-108`
 
 ### 1.2 Resolve Known Issues Before Upgrading
 - [x] **Woodpecker-CI agent restart loop** — FIXED 2026-04-26. Root causes: `v3` tag pointed to broken `next` dev build, `WOODPECKER_BACKEND` not set, SELinux blocked Docker socket. Fixed by pinning to `v3.7.0`, adding `WOODPECKER_BACKEND: docker`, and `security_opt: label:disable` on the agent.
 - [ ] Check for any other unhealthy containers: `docker ps --filter status=exited`
+  - Expect the 8 **Kasm** containers to already be exited — Kasm has been down and `kasm.service`
+    disabled since before the upgrade. That is the baseline state, not a fault.
 
-### 1.2a Upgrade Docker CE to v29.x BEFORE the Fedora Upgrade
+### 1.2a Docker Engine — ALREADY SATISFIED, but the packaging is not what this checklist assumed
 
-**This is required.** Kernel 6.17 (shipped with F43) removes legacy iptables modules that Docker v28.x needs. All 17 Docker Compose services will fail to start if Docker Engine is not on v29.x.
+**Correction (2026-07-31):** this host does **not** run Docker CE. It runs Fedora's own packages:
+
+| Package | Installed | In F43 |
+|---|---|---|
+| `moby-engine` | 29.4.2-1.fc42 | **29.6.2-1.fc43** |
+| `docker-cli` | 29.4.2-1.fc42 | 29.6.2-1.fc43 |
+| `docker-compose` | 5.1.2-1.fc42 | 5.3.1-1.fc43 |
+| `containerd.io` | 2.2.4-1.fc42 (Docker repo) | 2.2.6-1.fc43 |
+
+`docker-ce` and `docker-ce-cli` are **not installed** — the old command in this section
+(`sudo dnf upgrade docker-ce docker-ce-cli containerd.io`) would have done nothing useful. Do not run it.
+
+The v29 requirement is already met (29.4.2), and F43 keeps the engine on 29.x, so the
+kernel-iptables concern is resolved by the upgrade itself rather than by manual action.
 
 ```bash
-sudo dnf upgrade docker-ce docker-ce-cli containerd.io
-docker --version   # confirm 29.x before proceeding
+docker --version              # baseline: 29.4.2 — already >= 29
 sudo systemctl status docker
 ```
 
-- [ ] Docker CE upgraded to v29.x
-- [ ] Docker Engine starts cleanly
+- [x] Docker engine is on v29.x — verified 2026-07-31, `moby-engine-29.4.2-1.fc42`
+- [ ] Docker Engine starts cleanly after the upgrade (confirm it landed on 29.6.2-1.fc43)
 
 ### 1.3 Identify Potentially Conflicting Packages
-- [ ] Check for Wine (known upgrade conflict — remove if present):
-  ```
-  rpm -q wine && sudo dnf remove wine
-  ```
-- [ ] List RPM Fusion packages to check for F43 availability:
-  ```
-  sudo dnf repoquery --installed --disablerepo='*' --enablerepo='rpmfusion*' 2>/dev/null | head -40
-  ```
-- [ ] Check for other 3rd-party repo packages that may conflict:
+- [x] **Wine** — verified 2026-07-31: not installed. Nothing to remove.
+- [x] **Third-party repo readiness** — verified 2026-07-31. RPM Fusion (free + nonfree), the Docker
+  repo, and all five COPRs (`dejan/lazygit`, `ilyaz/LACT`, `jdxcode/mise`, `lihaohong/yazi`,
+  `phracek/PyCharm`) all publish for F43. Tailscale, 1Password, VS Code, Cursor, LibreWolf, Grafana
+  and `kevinpinscoe` use release-agnostic paths. Full table in the baseline file.
+- [x] **akmods / kernel modules** — verified 2026-07-31: only `kmod` / `kmod-libs` (base system).
+  No akmod-built out-of-tree modules, and no NVIDIA driver despite the RPM Fusion NVIDIA repo being
+  enabled. Nothing here blocks the upgrade.
+- [ ] Re-check for stragglers immediately before downloading:
   ```
   sudo dnf list extras
-  ```
-- [ ] Check for akmods / kernel modules that may block upgrade (NVIDIA-specific, but verify):
-  ```
-  rpm -qa | grep -E 'akmod|kmod'
   ```
 
 ### 1.4 Snap Pre-Checks
 - [ ] Note installed snaps: `snap list`
-  - Current snaps: obs-studio, shortwave, ffmpeg-2404, core20/22/24, gnome-42/46-2204/2404
+  - Baseline (2026-07-31): bare, core, core20, core22, core24, ffmpeg-2404, gnome-42-2204,
+    gnome-46-2404, gtk-common-themes, mesa-2404, obs-studio, shortwave, snapd
+  - Host `snapd` RPM is 2.75.2; the `snapd` snap itself is 2.76.1
 - [ ] Snaps are self-contained — no action required, but verify they work after upgrade
 
 ---
@@ -71,26 +110,64 @@ sudo systemctl status docker
   - `/home_backup` (sdb1)
 
 ### 2.2 Run All Container Backup Timers Manually
-Run each timer that has not fired recently:
+
+> **Regenerated 2026-07-31 from the live host.** There are now **38** backup timers, not the 14 this
+> section used to list. Most fire between 00:00 and 06:00, so if the upgrade starts early enough the
+> overnight run will already have happened — check `systemctl list-timers` before firing them all by
+> hand.
+
+Local container/application backups:
+
 - [ ] `sudo systemctl start actualbudget-backup.service`
-- [ ] `sudo systemctl start karakeep-backup.service`
-- [ ] `sudo systemctl start n8n-backup.service`
-- [ ] `sudo systemctl start wikijs-backup.service`
-- [ ] `sudo systemctl start youtrack-backup.service`
-- [ ] `sudo systemctl start pastebooks-backup.service` (includes MySQL dump)
-- [ ] `sudo systemctl start gitea-backup.service`
-- [ ] `sudo systemctl start garage-backup.service`
-- [ ] `sudo bash /opt/containers/glean/backup-glean.sh` — Glean's backup runs from `/etc/cron.d/glean-backup` (02:30 daily), not a systemd unit; this line was `glean-purge.service` until 2026-07-27, which ran a purge rather than a backup, and that unit has since been removed
-- [ ] `sudo systemctl start kroki-backup.service`
+- [ ] `sudo systemctl start argus-backup.service`
+- [ ] `sudo systemctl start backup-beszel.service`
+- [ ] `sudo systemctl start backup-filebrowser.service`
+- [ ] `sudo systemctl start backup-picoshare.service`
+- [ ] `sudo systemctl start backup-qui.service`
+- [ ] `sudo systemctl start backupmysql.service`
+- [ ] `sudo systemctl start c3x-backup.service`
+- [ ] `sudo systemctl start checkmk-backup.service`
 - [ ] `sudo systemctl start convertx-backup.service`
+- [ ] `sudo systemctl start dashboard-backup.service`
+- [ ] `sudo systemctl start erugo-backup.service`
+- [ ] `sudo systemctl start garage-backup.service`
+- [ ] `sudo systemctl start gitea-backup.service`
+- [ ] `sudo systemctl start karakeep-backup.service`
+- [ ] `sudo systemctl start kavita-backup.service`
+- [ ] `sudo systemctl start kroki-backup.service`
+- [ ] `sudo systemctl start lxconsole-backup.service`
+- [ ] `sudo systemctl start metabase-backup.service`
+- [ ] `sudo systemctl start n8n-backup.service`
 - [ ] `sudo systemctl start openbao-backup.service`
+- [ ] `sudo systemctl start pastebooks-backup.service` (includes MySQL dump)
+- [ ] `sudo systemctl start pgadmin-backup.service`
+- [ ] `sudo systemctl start portainer-backup.service`
+- [ ] `sudo systemctl start reader-backup.service`
 - [ ] `sudo systemctl start rsshub-backup.service`
+- [ ] `sudo systemctl start wallabag-backup.service`
+- [ ] `sudo systemctl start wikijs-backup.service`
 - [ ] `sudo systemctl start woodpecker-ci-backup.service`
+- [ ] `sudo systemctl start youtrack-backup.service`
+
+Not a systemd timer — run by hand:
+
+- [ ] `sudo bash /opt/containers/glean/backup-glean.sh` — Glean's backup is a **cron** job
+  (`/etc/cron.d/glean-backup`, 02:30 daily), not a systemd unit, so it has no catch-up and will be
+  **silently skipped if the host is down or mid-upgrade at 02:30** — exactly what happened on
+  2026-07-27. Take this one manually before starting. (Glean is pending decommission; see `TODO.md`.)
+
+Off-host pulls and verifiers — lower priority for the upgrade, but note their state:
+
+- `backup-core`, `backup-from-web1-to-local`, `backup-web1-openbao`,
+  `backup-donetick-from-web1-to-local`, `backup-matomo-from-mail1-to-local`,
+  `backup-unclutter-from-web1-to-local` — pull backups from other k-fed hosts
+- `gitea-backup-verify`, `youtrack-backup-verify` — verification timers
 
 Verify recent timestamps:
 ```
-systemctl list-timers --all | grep backup
+systemctl list-timers --all | grep -E 'backup|verify'
 ```
+- [ ] All expected timers show a recent last-run and a valid next-trigger
 
 ### 2.3 Snapshot /opt/containers Tree
 This is NOT covered by backup.sh and contains all compose files, configs, and secrets:
@@ -100,10 +177,24 @@ sudo rsync -av --delete /opt/containers/ /home_backup/containers-snapshot-$(date
 - [ ] Snapshot completed and size looks reasonable
 
 ### 2.4 Snapshot Kasm
+Kasm is already stopped (all 8 containers exited, `kasm.service` disabled), so the snapshot is
+consistent by default — but take it anyway, since Phase 6 may end in a reinstall or removal.
 ```
 sudo rsync -av --delete /opt/kasm/ /home_backup/kasm-snapshot-$(date +%Y%m%d)/
 ```
 - [ ] Kasm snapshot completed
+
+### 2.5 Retain Extra Kernels in GRUB
+`/etc/dnf/dnf.conf` currently has no `installonly_limit` set, so the default of 3 applies and three
+F42 kernels are installed. Raising it means the known-good F42 kernels survive as fallback entries
+after the upgrade.
+
+```bash
+echo 'installonly_limit=5' | sudo tee -a /etc/dnf/dnf.conf
+```
+- [ ] `installonly_limit` raised
+- [ ] GRUB shows multiple kernel entries at boot (the F42 kernels are the fallback if F43's kernel
+      misbehaves — see Phase 3.4)
 
 ---
 
@@ -131,10 +222,22 @@ sudo dnf system-upgrade reboot
 - [ ] System boots into Fedora 43
 
 ### 3.4 First Boot Into F43
+
+> **Kernel expectation corrected 2026-07-31.** This section used to say "expect 6.17.x". That was
+> true when F43 was released; it is not true now. F43's updates repo currently ships
+> **kernel 7.1.5-101.fc43**, and `dnf system-upgrade download` pulls from updates as well as the
+> release repo — so this host goes from **6.19.14 straight to 7.1.x in one hop**.
+>
+> The practical consequence: the amdgpu 6.17.9 page-fault regression documented further down is
+> **no longer the relevant risk** — you skip that kernel range entirely. The new unknown is a
+> major-version kernel jump (6.19 → 7.1) on a GCN4-era Radeon PRO WX 7100. This has not been
+> researched. Treat the first hours on F43 as a GPU-stability watch (QA-12), and keep the F42
+> kernels in GRUB as the fallback.
+
 - [ ] Confirm OS version: `cat /etc/fedora-release`
-- [ ] Confirm kernel: `uname -r` (expect 6.17.x)
+- [ ] Confirm kernel: `uname -r` — expect **7.1.x-NNN.fc43.x86_64** (record the exact version)
 - [ ] Confirm desktop (KDE Plasma) is working
-- [ ] Note: keep older kernel entries in GRUB as fallback if kernel 6.17.8+ has issues
+- [ ] Confirm the F42 kernels (`6.19.14-108.fc42` and older) are still listed in GRUB as fallback
 
 ---
 
@@ -167,63 +270,144 @@ F43 ships DNF 5 (replaces DNF4/YUM). History DB is separate — packages install
 ## Phase 5 — Container Verification
 
 ### 5.1 Restart All Containers
-```
-for d in /opt/containers/*/; do
-  name=$(basename "$d")
-  sudo systemctl restart "$name" 2>/dev/null || true
+
+> **Important (found 2026-07-31):** only about half the stacks have a systemd unit. The rest were
+> started with `docker compose up` directly and **will not come back on their own after the reboot**.
+> The old loop below silently skipped them.
+
+**Stacks with an enabled systemd unit** — these come back by themselves; restart if needed:
+
+```bash
+for n in actualbudget convertx excalidraw garage gitea-act-runner glean ingest karakeep \
+         kroki metabase n8n openbao pastebooks pkm reader rsshub wallabag watchtower \
+         wikijs woodpecker-ci youtrack; do
+  sudo systemctl restart "$n" 2>/dev/null || echo "no unit: $n"
 done
 ```
-Or restart individually as needed.
 
-- [ ] All containers started without errors: `docker ps`
-- [ ] Check for any exited containers: `docker ps --filter status=exited`
+**Stacks with NO systemd unit** — must be brought up by hand:
+
+```bash
+for n in argus beszel c3x cadvisor checkmk dashboard erugo filebrowser gatus gitea glance \
+         home_file_server kavita lxconsole pgadmin picoshare portainer qui rss tool-shed; do
+  (cd "/opt/containers/$n" && sudo docker compose up -d)
+done
+```
+
+- [ ] All unit-managed stacks restarted
+- [ ] All unit-less stacks brought up manually
+- [ ] Container count is back to the baseline of **73 running**: `docker ps | wc -l`
+- [ ] Check for exited containers: `docker ps --filter status=exited`
+      (the 8 Kasm containers are expected to stay exited — see Phase 6)
+
+> `gitea` has a backup timer but no service unit. Worth deciding after the upgrade whether that is
+> intentional; it means Gitea does not survive a reboot unattended.
 
 ### 5.2 Per-Container Checks
 
-| Container | Check | Status |
-|-----------|-------|--------|
-| actualbudget | UI loads on port 5007 | |
-| convertx | UI accessible | |
-| excalidraw | UI loads on port 5000 | |
-| filestash | UI accessible | |
-| garage | `garage status` returns healthy | |
-| gitea | UI loads; SSH on port 2223 works | |
-| glean | UI accessible | |
-| home_file_server | UI accessible | |
-| karakeep | UI loads on port 3000 | |
+> **Regenerated 2026-07-31.** The fleet is **44 Compose stacks / 73 running containers**, not the 17
+> this table used to list. Port bindings are deliberately not published here — they are in
+> `PRE-UPGRADE-BASELINE-2026-07-31.local.md`, or run `docker ps --format '{{.Names}}\t{{.Ports}}'`.
+
+| Stack | Check | Status |
+|-------|-------|--------|
+| actualbudget | UI reachable | |
+| argus | UI reachable | |
+| beszel | UI reachable; agent reporting | |
+| c3x | API reachable; db + scraper up | |
+| cadvisor | UI reachable | |
+| checkmk | UI reachable | |
+| convertx | UI reachable | |
+| dashboard | homepage reachable + socket-proxy up | |
+| erugo | UI reachable | |
+| excalidraw | UI reachable | |
+| filebrowser | UI reachable | |
+| filestash | stack present but **not running at baseline** — confirm intent | |
+| garage | `garage status` healthy; admin + S3 ports reachable | |
+| gatus | UI reachable | |
+| gitea | UI reachable; SSH port answers | |
+| gitea-act-runner | runner + dind both up, registered | |
+| glance | UI reachable | |
+| glean | web + admin reachable (pending decommission) | |
+| home_file_server | UI reachable | |
+| ingest | unit active; check its logs | |
+| karakeep | UI reachable; meilisearch + chrome up | |
+| kavita | UI reachable | |
 | kroki | Renders a test diagram | |
-| n8n | UI loads on port 21712 | |
-| openbao | `bao status` or API responds; **must unseal with 3 keys after restart** | |
-| pastebooks | UI loads on port 8080 | |
+| lxconsole | UI reachable | |
+| metabase | UI reachable; postgres healthy | |
+| n8n | UI reachable | |
+| openbao | API reachable; **must unseal with 3 keys after restart** | |
+| pastebooks | UI reachable; mysql healthy | |
+| pgadmin | UI reachable | |
+| picoshare | UI reachable | |
+| pkm | perlite web reachable | |
+| portainer | UI reachable | |
+| qui | UI reachable | |
+| reader | UI reachable; meilisearch, flaresolverr, rss-bridge up | |
+| rss | nginx reachable | |
 | rsshub | Returns feed data | |
-| wikijs | UI loads on port 3001 | |
+| tool-shed | UI reachable | |
+| trivy | stack present but **not running at baseline** — confirm intent | |
+| wallabag | UI reachable; db, redis, worker up | |
+| watchtower | container up; check it is not auto-updating anything unwanted | |
+| wikijs | UI reachable | |
 | woodpecker-ci | Server + agent both healthy | |
-| youtrack | UI loads on port 9000 | |
+| youtrack | UI reachable | |
+
+Also present but not part of the fleet check:
+- `youtrack.corrupt-20260729` — quarantined copy, must **not** be started
+- `pcm-ingest` / `pcm-perlite` — run outside `/opt/containers`
+- `incident-dev-postgres`, `incident-valkey` — dev containers
+- `buildx_buildkit_builder0` — buildx builder
 
 ### 5.3 SELinux Labels — Containers Using `label:disable`
-These containers use `security_opt: label:disable` and need revalidation after the SELinux policy update:
-- [ ] **karakeep** — confirm still starts and functions (meilisearch + chrome inside)
-- [ ] **n8n** — confirm still starts and workflow execution works
-- [ ] **openbao** — confirm still starts and data directory is accessible
-- [ ] **woodpecker-agent** — confirm agent connects to server and can reach Docker socket
+
+> **Corrected 2026-07-31:** this is **11 stacks**, not the 4 previously listed. These bypass SELinux
+> confinement and are the most likely to break after an SELinux policy update.
+>
+> The stack names are kept out of this public repo — they are in
+> `PRE-UPGRADE-BASELINE-2026-07-31.local.md`, or regenerate the list:
+
+```bash
+sudo grep -rl 'label:disable' /opt/containers/*/docker-compose.y*ml \
+  | sed 's|/opt/containers/||;s|/docker-compose.*||'
+```
+
+- [ ] Every stack in that list starts cleanly
+- [ ] Each one's core function works (search indexes, workflow runs, data directories readable,
+      the CI agent can reach the Docker socket)
+- [ ] Two of them were not running at baseline — confirm whether that is still intended
 - [ ] Check audit log for new denials: `sudo ausearch -m avc -c docker -ts today`
 
 ### 5.4 Backup Timers — Confirm Still Active
 ```
-systemctl list-timers --all | grep backup
+systemctl list-timers --all | grep -E 'backup|verify'
 ```
-- [ ] All backup timers are loaded and scheduled
+- [ ] All **38** backup/verify timers are loaded and scheduled (full list in the baseline file)
+- [ ] `/etc/cron.d/glean-backup` still present and crond running (Glean's backup is cron, not systemd)
 
 ---
 
-## Phase 6 — Kasm Upgrade (Separate Process)
+## Phase 6 — Kasm (Currently Down — Decision Needed)
 
 Kasm Workspaces 1.18.1 lives at `/opt/kasm` and is NOT managed by dnf or docker-compose.
 
-- [ ] Check Kasm F43 compatibility: https://www.kasmweb.com/docs/latest/release_notes.html
-- [ ] Check for newer Kasm version compatible with F43 (current: 1.18.1)
-- [ ] Follow Kasm's official upgrade procedure (not covered here — see Kasm docs)
-- [ ] After Kasm upgrade: verify all Kasm services are healthy:
+> **State change found 2026-07-31:** Kasm is **not running and has not been for days**. All 8
+> containers are exited (`kasm_proxy`, `kasm_rdp_https_gateway`, `kasm_rdp_gateway`, `kasm_agent`,
+> `kasm_manager`, `kasm_api`, `kasm_guac`, `kasm_db` — several with non-zero exit codes going back
+> 7 days) and `kasm.service` is **disabled and inactive**.
+>
+> This removes Kasm as an upgrade risk: there is nothing running to break. It also means the
+> post-upgrade QA-10 checks would fail for reasons that have nothing to do with F43.
+
+- [ ] **Decide Kasm's fate** — is it being retired, or does it need to come back? Nothing else in
+      this checklist can be answered until that is settled.
+- [ ] If retiring: plan the teardown (ports, DNS, vhosts, service catalog) the same way as the
+      Glean decommission in `TODO.md`
+- [ ] If keeping: check F43 compatibility at https://www.kasmweb.com/docs/latest/release_notes.html,
+      check for a newer release than 1.18.1, and follow Kasm's official upgrade procedure
+- [ ] If keeping, after the upgrade verify services are healthy:
   ```
   sudo /opt/kasm/bin/utils/usage_stats.py
   docker ps | grep kasm
@@ -236,10 +420,20 @@ Kasm Workspaces 1.18.1 lives at `/opt/kasm` and is NOT managed by dnf or docker-
 ## Potential Issues — Published Reports (researched 2026-04-26)
 
 > **Blocker assessment (2026-04-26):** None of the issues below are upgrade blockers. All have either a shipped fix or a confirmed workaround. See individual entries for rationale.
+>
+> **Re-assessment 2026-07-31:** the first two entries below are now **historical**. F43's kernel has
+> moved on from 6.17 to **7.1.5**, so neither the Docker/6.17-iptables issue nor the amdgpu 6.17.9
+> page-fault regression can be hit on this upgrade. They are kept for the record. The live concerns
+> are now the **Salt** entry further down and the **unresearched 6.19 → 7.1 kernel jump** (Phase 3.4).
 
-### ~~BLOCKER~~ CRITICAL — Docker CE + kernel 6.17 iptables — **NOT A BLOCKER: fix shipped in Docker CE v29.x**
+### ~~BLOCKER~~ ~~CRITICAL~~ HISTORICAL — Docker CE + kernel 6.17 iptables — **cannot occur: F43 now ships kernel 7.1.5, and this host is already on engine 29.x**
 
-**Risk level: HIGH for this system** (17 Docker Compose services depend on Docker Engine)
+**Risk level at the time: HIGH** (the whole Compose fleet depends on Docker Engine)
+
+**Why it no longer applies (2026-07-31):** this host runs Fedora's `moby-engine` 29.4.2 — already
+past the v28 cutoff — and F43 upgrades it to 29.6.2. The 6.17 kernel range is skipped entirely.
+Note also that the fix text below refers to `docker-ce` packages that are **not installed here**;
+see the corrected Phase 1.2a.
 
 Kernel 6.17 removed legacy `ip_tables` kernel modules. Docker Engine v28.x and earlier require these modules and **will fail to start** after the upgrade. Error seen:
 
@@ -273,9 +467,15 @@ Discussion: [Heads Up - Docker and F43 (Fedora Discussion)](https://discussion.f
 
 ---
 
-### ~~BLOCKER~~ HIGH — AMD amdgpu page faults and crashes (kernel 6.17.9+) — **NOT A BLOCKER: you are already running the fixed kernel**
+### ~~BLOCKER~~ ~~HIGH~~ HISTORICAL — AMD amdgpu page faults and crashes (kernel 6.17.9+) — **cannot occur: F43 now ships kernel 7.1.5, skipping the affected range**
 
-**Risk level: HIGH for this system** (AMD Radeon PRO WX 7100, amdgpu driver)
+> **Superseded 2026-07-31.** The 6.17.9–6.18.3 regression window is no longer reachable — F43's
+> updates repo ships **kernel 7.1.5-101.fc43**, and the host is coming from 6.19.14. The *new*
+> and unresearched risk is the 6.19 → 7.1 major-version jump on this GCN4-era card. See Phase 3.4
+> and QA-12; the fallback procedure below still applies, except that the kernel you fall back to is
+> `6.19.14-108.fc42`, not 6.17.8.
+
+**Risk level at the time: HIGH for this system** (AMD Radeon PRO WX 7100, amdgpu driver)
 
 Multiple confirmed reports of amdgpu page faults (`GCVM_L2_PROTECTION_FAULT_STATUS`) starting with kernel 6.17.9. Kernel 6.17.12 has additional crash/reset reports. The transition point is 6.17.8 → 6.17.9.
 
@@ -348,7 +548,36 @@ Source: [System Upgrade to 43 fails due to WINE](https://discussion.fedoraprojec
 
 ---
 
-### WARNING — Salt / SaltStack minion broken on Fedora 43 (Python 3.14) — **confirmed 2026-05-16**
+### WARNING — Salt / SaltStack broken on Fedora 43 (Python 3.14) — **still unfixed; ACCEPTED AS A KNOWN BREAKAGE 2026-07-31**
+
+> ## Waiver — read this first
+>
+> This entry used to end with *"Do NOT upgrade this host to Fedora 43 until Salt Python 3.14 compat
+> is confirmed working."* **Kevin waived that stop-condition on 2026-07-31** and chose to proceed
+> with the F43 upgrade knowing Salt will break.
+>
+> **Re-verified 2026-07-31 — nothing has improved for F43:**
+>
+> | Check | Result |
+> |---|---|
+> | F43 stable **and** `updates-testing` | `salt-3007.6-3.fc43` — the exact broken build |
+> | F43 Python | 3.14.6 — the version that triggers the bug |
+> | This host installs | `salt`, `salt-master` **and** `salt-minion`, all 3007.5-2.fc42 |
+> | F44 | `salt-3007.8-4.fc44` — newer upstream (3007.8) plus a deprecated-`spwd` removal patch |
+>
+> **Expected outcome after the upgrade:** `salt-minion` on this host stops responding
+> (`salt '*' test.ping` → `[No response]`). The earlier note that "the Salt master is unaffected"
+> held only while the master ran on F42/Python 3.13 — after this upgrade the **master is also on
+> Python 3.14** and should be assumed affected until proven otherwise.
+>
+> **Recovery paths, in order of preference:**
+> 1. Move to **F44**, which carries Salt 3007.8 (unverified as a fix, but it is the only newer build).
+> 2. Wait for a Fedora 43 Salt update past 3007.6-3 and `dnf upgrade salt salt-master salt-minion`.
+> 3. Manage the affected hosts over SSH/Ansible in the meantime.
+>
+> - [ ] After the upgrade, confirm the actual Salt damage: `sudo systemctl status salt-master salt-minion`
+>       and `sudo salt '*' test.ping`
+> - [ ] Record the result and decide between the recovery paths above
 
 **Affects:** any host running `salt-minion` from the Fedora 43 repo (`salt-3007.6-3.fc43`).
 **Risk level: HIGH** if you manage this host or VMs it runs as Salt minions.
@@ -373,13 +602,18 @@ This is caused by Python 3.14 changing how `multiprocessing.popen_forkserver` pi
 2. **Wait for Salt upstream fix** — watch https://github.com/saltstack/salt for a Python 3.14 compat PR.
 3. **Skip Salt on short-lived k3s VMs** — these are rebuilt frequently; manage them via SSH/Ansible instead.
 
-**This host (kevin.kevininscoe.com, Fedora 42, Python 3.13):** Salt master is unaffected. Do NOT upgrade this host to Fedora 43 until Salt Python 3.14 compat is confirmed working.
+**This host (kevin.kevininscoe.com, Fedora 42, Python 3.13):** Salt master is unaffected *while on F42*.
+~~Do NOT upgrade this host to Fedora 43 until Salt Python 3.14 compat is confirmed working.~~
+**Waived 2026-07-31** — see the waiver box at the top of this section. After the upgrade the master
+is on Python 3.14 as well and must be re-tested.
 
 ---
 
 ### LOW — Snap / squashfs on F43
 
-Snapd 2.72 is packaged for F43 and generally works. One known failure mode: snap apps fail to mount if `fuse` / `squashfuse` packages are missing.
+Snapd is packaged for F43 and generally works (this host is on `snapd-2.75.2` at baseline, with the
+`snapd` snap itself at 2.76.1 — both well past the 2.72 originally noted here). One known failure
+mode: snap apps fail to mount if `fuse` / `squashfuse` packages are missing.
 
 **Post-upgrade check if snaps fail:**
 
@@ -408,9 +642,12 @@ sudo dnf system-upgrade download --releasever=43 --disablerepo='rpmfusion*'
 - If KDE packages conflict, try: `sudo dnf system-upgrade download --releasever=43 --allowerasing`
 - Be cautious — `--allowerasing` can remove packages; review what it plans to remove
 
-### Kernel boot failure (6.17.8+ issue)
-- At GRUB, select an older kernel to boot
-- After stable boot: `sudo dnf install kernel-<older-version>` to pin if needed
+### Kernel boot failure
+- At GRUB, select an older kernel to boot — the retained **F42** kernels (`6.19.14-108.fc42` and
+  older) are the fallback, since F43 goes straight to 7.1.x
+- After a stable boot: `sudo grubby --set-default /boot/vmlinuz-6.19.14-108.fc42.x86_64` to pin it
+- Do not let `dnf autoremove` or a low `installonly_limit` reap the F42 kernels until the F43 kernel
+  has proven stable
 
 ### General dependency conflicts
 ```
@@ -424,26 +661,30 @@ Review the package list carefully before confirming.
 
 A systematic QA pass to run after the system is back up and containers are restarted. Steps marked **[AI]** can be run by an AI agent via shell commands. Steps marked **[HUMAN]** require visual/interactive verification.
 
+> **Compare every result against [`PRE-UPGRADE-BASELINE-2026-07-31.md`](PRE-UPGRADE-BASELINE-2026-07-31.md).**
+> Several things were already broken before the upgrade; without the baseline they read as new damage.
+
 ### QA-1 — OS and Kernel
 
 **[AI]**
 ```bash
 cat /etc/fedora-release                          # expect: Fedora release 43
-uname -r                                         # expect: 6.17.x-NNN.fc43.x86_64
-rpm -q kernel | sort                             # confirm multiple kernels retained
-rpm --version                                    # expect: RPM version 6.x
-dnf --version                                    # expect: 5.x
+uname -r                                         # expect: 7.1.x-NNN.fc43.x86_64
+rpm -q kernel | sort                             # confirm F42 kernels retained as fallback
+rpm --version                                    # expect: RPM version 6.x (baseline was 4.20.1)
+dnf --version                                    # expect: 5.x (already 5.2.18 on F42 — not a real signal)
 getenforce                                       # expect: Enforcing
-systemctl --failed --no-pager                    # expect: 0 units failed
+systemctl --failed --no-pager                    # compare against the baseline list below
 ```
 
 - [ ] OS is Fedora 43
-- [ ] Kernel is 6.17.x (note exact version; if 6.17.9+ and GPU issues occur, fall back)
-- [ ] At least 2 kernel entries available in GRUB
-- [ ] RPM 6.x confirmed
-- [ ] DNF 5.x confirmed
+- [ ] Kernel is **7.1.x** (note exact version — this is a major-version jump from 6.19; see Phase 3.4)
+- [ ] F42 kernels still listed in GRUB as fallback
+- [ ] RPM 6.x confirmed (this is the meaningful package-stack change; DNF was already 5.x)
 - [ ] SELinux Enforcing
-- [ ] No failed systemd units
+- [ ] **Failed units — do not expect zero.** These were already failing before the upgrade:
+      `check-ai-skill-jobs`, `check-pcm-nightly-ingest`, `dnsmasq`, `github-poll-for-activity`,
+      plus ~10 `drkonqi-coredump-processor@*` instances. Only **new** names are upgrade damage.
 
 ### QA-2 — Core System Services
 
@@ -454,14 +695,17 @@ sudo systemctl status tailscaled --no-pager      # Tailscale
 sudo systemctl status certbot-renew.timer --no-pager
 sudo systemctl status snapd --no-pager
 sudo systemctl status docker --no-pager
-docker --version                                 # must show 29.x
+docker --version                                 # expect 29.6.2 (from moby-engine, not docker-ce)
+rpm -q moby-engine docker-cli docker-compose containerd.io
+sudo systemctl status salt-master salt-minion --no-pager   # expected to be broken — see the Salt waiver
 ```
 
 - [ ] httpd running
 - [ ] Tailscale connected: `tailscale status`
 - [ ] certbot-renew.timer active and scheduled
 - [ ] snapd running
-- [ ] Docker Engine running and v29.x
+- [ ] Docker Engine running, `moby-engine` on 29.6.2-1.fc43
+- [ ] Salt breakage confirmed and recorded (expected — not a regression to chase)
 
 ### QA-3 — SELinux AVC Denials
 
@@ -483,65 +727,77 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' | sort
 docker ps --filter status=exited --format 'table {{.Names}}\t{{.Status}}'
 ```
 
-- [ ] All expected containers show `Up` — none in `Exited` or `Restarting`
-- [ ] Containers using `label:disable` are running: karakeep, n8n, openbao, woodpecker-agent
+- [ ] Container count back to the baseline of **73 running**
+- [ ] All expected containers show `Up` — none unexpectedly in `Exited` or `Restarting`
+- [ ] The 20 unit-less stacks were brought up by hand (Phase 5.1) — they do **not** auto-start
+- [ ] All 11 `label:disable` stacks running (list in the `.local.md` baseline — see Phase 5.3)
+- [ ] Expected exceptions: the 8 Kasm containers stay exited; `youtrack.corrupt-20260729` stays down
 
 ### QA-5 — Container Health Endpoints
 
-**[AI]** — run each curl and check for expected response:
+**[AI]** — the old version of this section covered 12 of 44 stacks. Sweep every published port
+instead, then follow up on the service-specific endpoints below.
 
 ```bash
-# rsshub
-curl -sf https://rsshub.kevininscoe.com/healthz && echo OK
+# Sweep every HTTP endpoint the fleet is currently publishing, derived from Docker itself
+docker ps --format '{{.Names}}\t{{.Ports}}' \
+  | grep -oE '127\.0\.0\.1:[0-9]+|0\.0\.0\.0:[0-9]+' \
+  | cut -d: -f2 | sort -un \
+  | while read -r p; do
+      printf '%-6s %s\n' "$p" "$(curl -s -o /dev/null -m 10 -w '%{http_code}' "http://127.0.0.1:$p")"
+    done
+```
 
-# woodpecker-ci
-curl -sf http://127.0.0.1:28706/healthz && echo OK
+A `2xx`, `3xx`, or even `401`/`403` means the service is up; `000` means nothing is listening.
 
-# openbao — must show "sealed":false
+Compare the result against the port map in **`PRE-UPGRADE-BASELINE-2026-07-31.local.md`** — 40 ports
+were published at baseline. That map is deliberately kept out of the published repo, so the command
+above derives the list live rather than hardcoding it.
+
+Service-specific checks that a status code alone will not catch:
+
+```bash
+# openbao — must show "sealed":false (SEALS ON EVERY RESTART)
 curl -s https://openbao.kevininscoe.com/v1/sys/health | python3 -m json.tool
 
 # garage
 sudo docker exec garage garage status
 
-# gitea
+# gitea — API version, plus the SSH port
 curl -sf https://git.kevininscoe.com/api/v1/version && echo OK
+ssh -T -p 2223 git@git.kevininscoe.com 2>&1 | head -1
 
-# wikijs (allow 60s after restart)
-curl -sf -o /dev/null -w "%{http_code}" https://wikijs.kevininscoe.com
+# rsshub — must return feed data, not just 200
+curl -sf https://rsshub.kevininscoe.com/healthz && echo OK
 
-# pastebooks
-curl -sf -o /dev/null -w "%{http_code}" http://127.0.0.1:8080
+# woodpecker-ci — server health, then confirm the agent registered
+WP=$(docker port woodpecker-server 8000 | head -1)
+curl -sf "http://$WP/healthz" && echo OK
+sudo docker logs woodpecker-agent --tail 20 2>&1 | grep -i 'connect\|error'
 
-# actualbudget
-curl -sf -o /dev/null -w "%{http_code}" http://127.0.0.1:5007
+# youtrack — expect 200 only after migration completes (60-90s)
+YT=$(docker port youtrack 8080 | head -1)
+curl -sf -o /dev/null -w "%{http_code}" "http://$YT"
 
-# n8n
-curl -sf -o /dev/null -w "%{http_code}" http://127.0.0.1:21712
+# kroki — actually render something
+KR=$(docker port kroki-core 8000 | head -1)
+curl -sf -o /dev/null -w "%{http_code}" "http://$KR/graphviz/svg/eNpLyUwvSizIUHBXqPZIzcnJVwjPL8pJUQQAgKQIAA=="
 
-# excalidraw
-curl -sf -o /dev/null -w "%{http_code}" http://127.0.0.1:5000
-
-# karakeep
-curl -sf -o /dev/null -w "%{http_code}" http://127.0.0.1:3000
-
-# youtrack — expect 200 after migration completes (60-90s)
-curl -sf -o /dev/null -w "%{http_code}" http://127.0.0.1:9000
+# databases behind the apps
+for c in glean-postgres metabase-postgres wallabag-db wikijs-db pastebooks-db; do
+  printf '%-20s %s\n' "$c" "$(sudo docker inspect -f '{{.State.Health.Status}}' $c 2>/dev/null)"
+done
 ```
 
-| Container | Expected | Pass? |
-|-----------|----------|-------|
-| rsshub | `ok` (200) | |
-| woodpecker-ci | `{"status":"ok"}` (200) | |
-| openbao | `"sealed": false` | |
-| garage | healthy output | |
-| gitea | JSON with version | |
-| wikijs | 200 | |
-| pastebooks | 200 | |
-| actualbudget | 200 | |
-| n8n | 200 | |
-| excalidraw | 200 | |
-| karakeep | 200 | |
-| youtrack | 200 | |
+- [ ] Port sweep: every port that was listening at baseline is listening again
+- [ ] OpenBao unsealed (see QA-6)
+- [ ] Garage reports healthy
+- [ ] Gitea API responds and its SSH port answers
+- [ ] RSSHub returns feed data
+- [ ] Woodpecker agent reconnected to the server
+- [ ] YouTrack finished migrating and returns 200
+- [ ] Kroki renders a diagram
+- [ ] All backing databases report `healthy`
 
 **[HUMAN]** — spot-check a few UIs in browser to confirm they render correctly (not just HTTP 200):
 - [ ] Gitea: `https://git.kevininscoe.com` — login works, repos visible
@@ -594,11 +850,13 @@ sudo chcon -t bin_t /opt/containers/<name>/backup.sh
 
 **[AI]**
 ```bash
-systemctl list-timers --all | grep -E "backup|purge"
+systemctl list-timers --all | grep -E "backup|verify"
+ls -l /etc/cron.d/glean-backup && systemctl is-active crond
 ```
 
-- [ ] All 14 backup/purge timers listed and showing a next trigger time
+- [ ] All **38** backup/verify timers listed and showing a next trigger time (full list in the baseline)
 - [ ] No timer in `failed` state
+- [ ] Glean's cron backup entry survived the upgrade and `crond` is active
 
 Run one manual backup to confirm the full pipeline works end-to-end:
 ```bash
@@ -610,18 +868,24 @@ journalctl -u woodpecker-ci-backup.service -n 20 --no-pager
 
 ### QA-10 — Kasm Workspaces
 
-**[AI]**
+> **Not applicable as written.** Kasm was already **down and disabled before the upgrade** — all 8
+> containers exited, `kasm.service` disabled and inactive. The checks below only apply once Phase 6's
+> "decide Kasm's fate" question is answered and Kasm is deliberately brought back.
+
+**[AI]** — confirm nothing changed unexpectedly:
 ```bash
-sudo docker ps | grep kasm
-sudo /opt/kasm/bin/utils/usage_stats.py 2>/dev/null | head -20
+sudo docker ps -a | grep kasm       # expect: still exited
+systemctl is-enabled kasm.service   # expect: disabled
+ls /opt/kasm                        # expect: still installed, 1.18.1
 ```
 
-- [ ] All 8 Kasm containers are `Up`
-- [ ] `kasm.service` is active: `systemctl status kasm`
+- [ ] Kasm still down and disabled — matches baseline, no action needed
+- [ ] `/opt/kasm` intact (the snapshot from Phase 2.4 is the safety net)
 
-**[HUMAN]**
-- [ ] Log into Kasm web UI and launch a workspace session to verify end-to-end function
-- [ ] kasm-network-plugin.service running: `systemctl status kasm-network-plugin`
+Only if Kasm is being restored:
+- [ ] All 8 Kasm containers `Up`, `kasm.service` active
+- [ ] **[HUMAN]** Log into the Kasm web UI and launch a workspace session
+- [ ] `kasm-network-plugin.service` running
 
 ### QA-11 — Snap Apps
 
@@ -632,7 +896,8 @@ snap refresh --list 2>/dev/null || echo "up to date"
 systemctl status snapd --no-pager
 ```
 
-- [ ] All previously installed snaps listed: obs-studio, shortwave, ffmpeg-2404, core20/22/24, gnome-42/46-2204/2404
+- [ ] All previously installed snaps listed: bare, core, core20, core22, core24, ffmpeg-2404,
+      gnome-42-2204, gnome-46-2404, gtk-common-themes, mesa-2404, obs-studio, shortwave, snapd
 - [ ] snapd running without errors
 
 **[HUMAN]**
@@ -640,22 +905,48 @@ systemctl status snapd --no-pager
 
 ### QA-12 — AMD GPU Stability
 
-**[HUMAN]** — monitor for 30 minutes of normal use after upgrade:
+> **Raised in priority 2026-07-31.** This upgrade jumps the kernel from 6.19.14 to **7.1.x** in one
+> step, on a GCN4-era Radeon PRO WX 7100. That combination has not been researched and is now the
+> single largest unknown in the upgrade. Watch it properly rather than treating it as a formality.
+
+**[HUMAN]** — monitor through at least 30 minutes of normal use, including something GPU-intensive:
 
 ```bash
 # Check for GPU errors in kernel log
 sudo journalctl -k | grep -i "amdgpu\|gpu.*fault\|drm.*error" | tail -20
+
+# Confirm the driver bound and which one
+lspci -k | grep -A3 -i vga
 ```
 
-- [ ] No `GCVM_L2_PROTECTION_FAULT_STATUS` errors in kernel log
-- [ ] Desktop rendering looks correct (no artifacts)
-- [ ] If instability occurs: note kernel version (`uname -r`) and fall back to previous kernel in GRUB
+- [ ] amdgpu bound to the card and no driver fallback to software rendering
+- [ ] No `GCVM_L2_PROTECTION_FAULT_STATUS` or GPU reset messages in the kernel log
+- [ ] Desktop rendering looks correct (no artifacts, no compositor restarts)
+- [ ] If instability occurs: record `uname -r`, then reboot into **`6.19.14-108.fc42`** from GRUB —
+      the F42 kernels are the fallback, not 6.17.8 as this checklist used to say
+
+### QA-13 — Salt (expected broken)
+
+**[AI]** — this is a *confirmation* step, not a pass/fail. The breakage was accepted in advance.
+
+```bash
+sudo systemctl status salt-master salt-minion --no-pager
+rpm -q salt salt-master salt-minion              # expect 3007.6-3.fc43
+sudo salt '*' test.ping                          # expect [No response] from F43 minions
+sudo journalctl -u salt-minion -n 40 --no-pager | grep -i 'error\|traceback'
+```
+
+- [ ] Actual failure mode recorded (missing deps, `_args_for_getstate` crash, or unexpectedly working)
+- [ ] Whether the **master** is also affected on Python 3.14 — recorded
+- [ ] Recovery path chosen (F44 / wait for a fixed F43 build / manage over SSH)
 
 ### QA Sign-off
 
-- [ ] All QA-1 through QA-12 checks passed (or failures documented with workarounds applied)
+- [ ] All QA-1 through QA-13 checks passed (or failures documented with workarounds applied)
 - [ ] Date/time of completed QA: _______________
 - [ ] Kernel version running: _______________
+- [ ] Container count vs. the baseline of 73: _______________
+- [ ] Salt status (expected broken): _______________
 - [ ] Any open issues: _______________
 
 ---
@@ -666,6 +957,15 @@ sudo journalctl -k | grep -i "amdgpu\|gpu.*fault\|drm.*error" | tail -20
 - [x] Create RUNBOOK.md files for the 7 containers that were missing them — DONE 2026-04-26 (actualbudget, excalidraw, karakeep, n8n, pastebooks, wikijs, youtrack)
 - [x] Add Fedora 43 upgrade notes to existing RUNBOOK.md files — DONE 2026-04-26 (convertx, filestash, garage, gitea, glean, home_file_server, kroki, openbao, rsshub, woodpecker-ci)
 - [ ] Run `sudo dnf distro-sync` to realign any 3rd-party packages to F43 equivalents
+- [ ] **Decide Kasm's fate** (Phase 6) — it has been down and disabled since before the upgrade
+- [ ] **Resolve Salt** — pick a recovery path from the waiver box (F44, wait for a fixed F43 build,
+      or manage the affected hosts over SSH/Ansible)
+- [ ] **Plan the 43 → 44 upgrade.** F44 is already released, so F43 is N-1 with a limited support
+      window — and F44 carries the newer Salt. Do not repeat the F42 situation of sitting on an EOL
+      release.
+- [ ] Add systemd units for the 20 stacks that have none, or record deliberately that they are
+      manual-start only (they did not survive this reboot without hand-holding)
+- [ ] Resume the Glean decommission in `TODO.md` — it is still fully running
 - [ ] **Bump Fedora version references from 42 → 43** now that the FLDW is actually on F43. This was deliberately deferred during the 2026-07-22 `fedora/` → `FLDW/` rename because the host was still on F42; on 2026-07-22 all three source-of-truth files were aligned to F42 so they match the live host until the upgrade actually happens. Change "Fedora Linux 42" → "Fedora Linux 43" in each:
   - `~/ai/me.md` — *Systems and Environments* section.
   - `~/ai/directives/kevins-federated-unix-universe.md` — the `FLDW` row in the Home table and the `FLDW` *Host-specific parameters* Description (two spots).
