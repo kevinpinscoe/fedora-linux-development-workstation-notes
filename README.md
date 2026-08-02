@@ -29,6 +29,8 @@ fedora-linux-development-workstation-notes/
 │   ├── notes-container-inventory.md      # Inventory of the 44 Docker Compose stacks
 │   ├── notes-fedora43-upgrade-planning.md  # Research notes and key findings
 │   └── notes-system-profile.md           # Hardware, disk layout, and key services
+├── fedora-43-to-44-upgrade/   # In-place upgrade notes (Fedora 43 → 44) — planning only
+│   └── notes-fedora44-upgrade-planning.md  # Research notes; checklist not written yet
 ├── kde/
 │   └── RUNBOOK.md             # KDE Plasma desktop ops runbook (Plasma/KWin, global shortcuts)
 └── garage/
@@ -48,6 +50,17 @@ Notes and a step-by-step checklist for the in-place upgrade from Fedora 42 to Fe
 | `notes-system-profile.md` | Hardware inventory, disk layout, and key services on the host |
 | `notes-container-inventory.md` | Inventory of the 44 Docker Compose stacks in `/opt/containers`, including which have systemd units, backup timers, and RUNBOOK status |
 | `PRE-UPGRADE-BASELINE-2026-07-31.md` | Snapshot of the host taken the night before the F43 upgrade — package versions, pre-existing failed units, container fleet, backup timers, third-party repo readiness. Compare against it during QA so pre-existing faults are not read as upgrade damage. Port and SELinux-confinement detail is held back in an untracked `.local.md` companion, since this repo is public. |
+
+### `fedora-43-to-44-upgrade/`
+
+**Planning only — nothing scheduled, and the F43 QA pass is not finished.**
+
+| File | Description |
+|------|-------------|
+| `notes-fedora44-upgrade-planning.md` | Research notes: package diff F43 → F44 read off live metadata, the MariaDB 10.11 → 11.8 migration as the standout risk, third-party repo readiness, prerequisites inherited from F43, and the open F44-vs-skip-to-F45 question |
+
+The actionable checklist (`FEDORA-UPGRADE-44.md`) is deliberately not written yet — see the notes
+file's "Next artifact" section for what has to be answered first.
 
 ## Runbooks
 
