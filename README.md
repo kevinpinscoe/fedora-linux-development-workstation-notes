@@ -30,7 +30,8 @@ fedora-linux-development-workstation-notes/
 │   ├── notes-fedora43-upgrade-planning.md  # Research notes and key findings
 │   └── notes-system-profile.md           # Hardware, disk layout, and key services
 ├── fedora-43-to-44-upgrade/   # In-place upgrade notes (Fedora 43 → 44) — planning only
-│   └── notes-fedora44-upgrade-planning.md  # Research notes; checklist not written yet
+│   ├── notes-fedora44-upgrade-planning.md  # Research notes; checklist not written yet
+│   └── notes-mariadb-11-migration.md       # MariaDB 10.11 → 11.8 migration research
 ├── kde/
 │   └── RUNBOOK.md             # KDE Plasma desktop ops runbook (Plasma/KWin, global shortcuts)
 └── garage/
@@ -58,6 +59,7 @@ Notes and a step-by-step checklist for the in-place upgrade from Fedora 42 to Fe
 | File | Description |
 |------|-------------|
 | `notes-fedora44-upgrade-planning.md` | Research notes: package diff F43 → F44 read off live metadata, the MariaDB 10.11 → 11.8 migration as the standout risk, third-party repo readiness, prerequisites inherited from F43, and the open F44-vs-skip-to-F45 question |
+| `notes-mariadb-11-migration.md` | MariaDB 10.11 → 11.8 research: what is actually on the host (two MediaWiki DBs, ~360 MB, two regenerable MyISAM tables), the supported in-place upgrade path, why the rollback is restore-from-dump, and the `innodb_snapshot_isolation` default change as the most likely real fault |
 
 The actionable checklist (`FEDORA-UPGRADE-44.md`) is deliberately not written yet — see the notes
 file's "Next artifact" section for what has to be answered first.

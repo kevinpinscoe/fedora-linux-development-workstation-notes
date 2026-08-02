@@ -1,7 +1,7 @@
 # Fedora 43 → 44 upgrade — planning notes
 
 **Status:** research only. Nothing is scheduled and no work has begun.
-**Opened:** 2026-08-02
+**Opened:** 2026-08-01
 **Blocked on:** the Fedora 43 post-upgrade QA pass is not finished. See "Prerequisites" below.
 
 These are planning notes, not a checklist. The actionable checklist —
@@ -13,7 +13,7 @@ mean inventing content for an upgrade nobody has researched yet.
 
 ## The headline: this is a much smaller jump than F42 → F43
 
-Every number below was read off the live host or off Fedora's own metadata on **2026-08-02**, not
+Every number below was read off the live host or off Fedora's own metadata on **2026-08-01**, not
 recalled. Package versions in a released Fedora move, so re-run these checks before committing to
 a date — the method is recorded beside each so they can be repeated.
 
@@ -65,21 +65,34 @@ against the data directory, and the on-disk format and some SQL/config behaviour
 between series. On this host that matters more than usual because MariaDB is not a leaf package —
 `backupmysql` runs against it on a six-times-daily schedule, and container stacks sit on top of it.
 
-**Unresearched.** No compatibility work has been done. Before F44 is scheduled:
+**Researched 2026-08-01 — see [`notes-mariadb-11-migration.md`](notes-mariadb-11-migration.md)
+for the full findings.** The short version, which downgrades this risk considerably:
 
-- Read the MariaDB 11.x upgrade notes for anything that breaks a 10.11 data directory.
-- Establish what the rollback is. A package downgrade will **not** undo a data-directory upgrade —
-  the real rollback is a restore from dump, so a verified dump has to exist immediately before.
-- Decide whether to do the MariaDB migration as its own change *before* the OS upgrade, so the two
-  are not entangled. Debugging a database migration and a distro upgrade at the same time is the
-  situation to avoid.
+- **In-place upgrade is supported** and major versions may be skipped — 10.11 → 11.8 direct is a
+  sanctioned path. A dump/restore is not required.
+- **The dataset is tiny** — two MediaWiki databases totalling ~360 MB. `backupmysql` already
+  writes a 41 MB gzipped full dump six times a day.
+- **Only two non-InnoDB tables**, both MediaWiki `searchindex` (MyISAM), and both regenerable
+  with `rebuildtextindex.php`. Not authoritative data.
+- **Only affects the host instance.** `pastebooks-db` (`mysql:8.4`) and three Postgres containers
+  pin their own images and are untouched by a Fedora release upgrade.
+- **Downgrade is not supported** — "MariaDB server is not designed for downgrading." The rollback
+  is a restore from dump, taken immediately before and *verified restorable*. This is the single
+  most important prerequisite.
+- **The change most likely to bite** is `innodb_snapshot_isolation` defaulting to `ON` in 11.8,
+  which makes Repeatable Read conflict detection stricter and can raise `ERROR 1020` on
+  concurrent `UPDATE`/`DELETE`. MediaWiki does concurrent writes. Mitigation is a one-line
+  `my.cnf` revert.
+- **11.8 is LTS**, maintained to June 2028 — this is LTS → LTS, which weakens the case for
+  skipping F44 purely to avoid the migration.
 
-Note that the F43 upgrade already exercised the "dump exists and is restorable" path — see the
-gitea-backup and youtrack restore-drill machinery — so the tooling is there.
+Recommended sequencing: rehearse the migration in a throwaway 11.8 container against a restored
+dump *before* the OS upgrade, so the database work and the distro work are never being debugged
+at the same time.
 
 ---
 
-## Ecosystem readiness — checked 2026-08-02, all green
+## Ecosystem readiness — checked 2026-08-01, all green
 
 The third-party repos that historically block a Fedora upgrade all have F44 content already:
 
@@ -109,7 +122,7 @@ This is a materially better starting position than F43 had, where the `sftpgo` r
 Inherited from the F43 upgrade, tracked in the repo root `CHECKPOINT.md`:
 
 - [ ] **Reboot and confirm the backup-timer burst is gone.** Eleven timers were fixed on
-      2026-08-02 (`Requires=` removed from `[Unit]`); the fix is verified structurally but not yet
+      2026-08-01 (`Requires=` removed from `[Unit]`); the fix is verified structurally but not yet
       behaviourally. Kevin is doing this Sunday.
 - [ ] **GPU soak (QA-12)** — 30+ minutes of real use including something GPU-intensive, then
       re-check `journalctl -k`. Also Sunday. As above, this doubles as the F44 kernel answer.
