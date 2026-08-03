@@ -1,9 +1,25 @@
 **/resume.sh
+**/resume.txt
+
 # Host-detail files kept on disk but never published — this repo is public.
 # Port maps, SELinux-confinement status, and similar reconnaissance detail live in *.local.md.
+# *.local.txt covers the same rule for non-Markdown captures: the pre-upgrade `rpm -qa` package
+# manifests are an exact software-and-version inventory of an internet-reachable host, which is
+# the strongest reconnaissance artifact in this repo. They stay on disk and are never published.
 **/*.local.md
+**/*.local.txt
+
 **/.DS_Store
+**/Thumbs.db
 **/.claude
+**/.claude/settings.local.json
 **/.codex
 **/.trash/
 **/.obsidian/workspace.json
+**/.obsidian/graph.json
+**/.obsidian/plugins/*/data.json
+
+**/*.swp
+**/*.pyc
+**/*.pyo
+**/__pycache__/
