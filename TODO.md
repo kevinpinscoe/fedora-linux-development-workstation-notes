@@ -5,7 +5,10 @@ Human-owned task list for this host. Delete this file once every item is checked
 ## Research: kernel 7.x on the Radeon PRO WX 7100 (GCN4)
 
 **Raised:** 2026-08-01, during the Fedora 42 → 43 upgrade prep.
-**Status:** open — this is the largest unresearched risk carried into F43.
+**Status:** **largely answered 2026-08-02 by direct evidence — the card is healthy on kernel
+7.1.5.** A 35-minute instrumented GPU soak found zero faults, ring timeouts, resets, or DRM
+errors. What remains open is the literature search (has anyone else reported GCN4 regressions on
+7.x?) and one untested subsystem — the video decode ring. See "What the soak found" below.
 
 ### What the concern is, plainly
 
@@ -38,19 +41,50 @@ Kernel `6.19.14-108.fc42` stays installed and stays selectable in GRUB. If 7.1.x
 reboot, pick the old kernel, and the machine is back to its pre-upgrade behaviour. Do not let
 `dnf autoremove` or a low `installonly_limit` reap the F42 kernels until 7.1.x has proven itself.
 
+### What the soak found — 2026-08-02
+
+**The worry did not materialise.** Kernel `7.1.5-101.fc43` drives this 2016 GCN4 card without
+complaint. Thirty-five minutes of sustained load produced **zero** GPU faults, ring timeouts,
+resets, or DRM errors, and none of the three failure signatures listed above appeared: no
+artifacts, no compositor restart, and no fallback to software rendering — OpenGL 4.6 with the
+`radeonsi` driver and ACO shader compiler throughout.
+
+The card ran hot but correctly: peak 93 °C against a 99 °C critical point, and peak 95.0 W against
+its 95 W cap. It throttled on **power**, not temperature, which is the healthy signature.
+
+**On the "moved to legacy" fear specifically — it has not been.** Polaris/GCN4 is still fully
+supported by `amdgpu` in kernel 7.x and by Mesa 25.3.6. All 9 IP blocks initialized at boot,
+including both video engines (`uvd_v6_3_0`, `vce_v3_4_0`), each reporting its firmware version.
+The one real GCN4 limitation is **ROCm** (GPU compute), which dropped `gfx803` years ago — that is
+unrelated to graphics or video, and long predates F43.
+
 ### Tasks
 
 - [ ] Search for GCN4 / Polaris regression reports against kernel 7.x — the canonical place is
       [drm/amd GitLab issues](https://gitlab.freedesktop.org/drm/amd/-/issues); also check the
-      Fedora Discussion forum and the `amd-gfx` mailing list
-- [ ] Confirm whether GCN4 / Polaris is still fully supported in 7.x, or has been moved toward
-      legacy handling
-- [ ] Record the running kernel version and any GPU log entries after the upgrade
-      (`uname -r`; `sudo journalctl -k | grep -i 'amdgpu\|gpu.*fault\|drm.*error'`)
-- [ ] Watch for 30+ minutes of real use, including something GPU-intensive, per QA-12 in
-      `fedora-42-to-43-upgrade/FEDORA-UPGRADE-43.md`
-- [ ] Write the finding back into the upgrade checklist so the next upgrade inherits the answer
-      rather than the question
+      Fedora Discussion forum and the `amd-gfx` mailing list.
+      **Lower priority now** — this host has its own direct evidence; the search would only
+      confirm it or surface a latent issue not yet hit.
+- [x] Confirm whether GCN4 / Polaris is still fully supported in 7.x, or has been moved toward
+      legacy handling — 2026-08-02. **Fully supported, not legacy.** See above.
+- [x] Record the running kernel version and any GPU log entries after the upgrade — 2026-08-02.
+      Kernel `7.1.5-101.fc43.x86_64`; GPU log entries clean across boot and soak.
+- [x] Watch for 30+ minutes of real use, including something GPU-intensive, per QA-12 in
+      `fedora-42-to-43-upgrade/FEDORA-UPGRADE-43.md` — 2026-08-02, 35 min instrumented soak.
+      **Caveat:** gfx ring only. The video (UVD) ring could not be tested — see below.
+- [x] Write the finding back into the upgrade checklist so the next upgrade inherits the answer
+      rather than the question — 2026-08-02. Written into QA-12 of the F43 checklist and into the
+      F44 planning notes' prerequisites.
+
+### Left open by the soak
+
+- [ ] **Hardware video decode is unavailable, so the UVD ring is untested.** Stock Fedora's
+      `mesa-va-drivers` strips H.264/HEVC for patent reasons; `vainfo` offers only MPEG2 and JPEG,
+      and `mpv --hwdec=vaapi` falls back to software. RPM Fusion's `mesa-va-drivers-freeworld`
+      (`25.3.6-1.fc43`) supplies the missing codecs and is not installed.
+      **This is a packaging gap, not a hardware or card-age problem** — stock Fedora behaves the
+      same way on current GPUs. Decide whether to install it, then re-run a decode soak to close
+      the UVD gap. Full detail in QA-12 of the F43 checklist.
 
 ---
 

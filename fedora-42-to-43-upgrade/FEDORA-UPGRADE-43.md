@@ -937,6 +937,11 @@ systemctl status snapd --no-pager
 > step, on a GCN4-era Radeon PRO WX 7100. That combination has not been researched and is now the
 > single largest unknown in the upgrade. Watch it properly rather than treating it as a formality.
 
+> **ANSWERED 2026-08-02 — the card is fine on kernel 7.1.5.** A 35-minute instrumented soak found
+> **zero** GPU faults, ring timeouts, resets, or DRM errors. The biggest unresearched risk carried
+> into F43 is now closed, and the same answer carries forward to F44 (see
+> `../fedora-43-to-44-upgrade/notes-fedora44-upgrade-planning.md`).
+
 **[HUMAN]** — monitor through at least 30 minutes of normal use, including something GPU-intensive:
 
 ```bash
@@ -947,11 +952,76 @@ sudo journalctl -k | grep -i "amdgpu\|gpu.*fault\|drm.*error" | tail -20
 lspci -k | grep -A3 -i vga
 ```
 
-- [ ] amdgpu bound to the card and no driver fallback to software rendering
-- [ ] No `GCVM_L2_PROTECTION_FAULT_STATUS` or GPU reset messages in the kernel log
-- [ ] Desktop rendering looks correct (no artifacts, no compositor restarts)
+- [x] amdgpu bound to the card and no driver fallback to software rendering — 2026-08-02.
+      `radeonsi` / POLARIS10, OpenGL **4.6** compatibility profile, Mesa 25.3.6, ACO shader
+      compiler. All 9 IP blocks initialized at boot, including `uvd_v6_3_0` and `vce_v3_4_0`.
+- [x] No `GCVM_L2_PROTECTION_FAULT_STATUS` or GPU reset messages in the kernel log — 2026-08-02.
+      Zero across the whole 35-minute soak and the boot that preceded it.
+- [x] Desktop rendering looks correct (no artifacts, no compositor restarts) — 2026-08-02.
+      Three displays (DP-1, DP-3, DP-4) stayed up throughout; no compositor restart.
 - [ ] If instability occurs: record `uname -r`, then reboot into **`6.19.14-108.fc42`** from GRUB —
       the F42 kernels are the fallback, not 6.17.8 as this checklist used to say
+
+#### Soak method and results — 2026-08-02 16:00–16:35
+
+Harness: `~/tmp/gpu-soak-20260802.sh` (not committed; it is a scratch script). It ran
+`glmark2 --run-forever` and sampled temperature, power, fan, clocks and busy% every 15 s for
+35 minutes, aborting early on any kernel GPU fault. `glmark2` and `radeontop` were installed from
+the Fedora repo for this — CLI tools only, no unit and no config, so out of FLDW changelog scope.
+
+| Metric | Result |
+|---|---|
+| Kernel GPU faults / ring timeouts / resets / VM faults | **0** |
+| Duration / samples | 35 min / 140 |
+| Edge temperature | mean 83.8 °C, peak **93 °C** (critical 99 °C) |
+| Power (PPT) | mean 62.9 W, peak **95.0 W** (cap 95 W) |
+| GPU busy | mean 54%, peak 100% |
+| Fan | peak 3,617 RPM of 4,500 |
+| Cooldown | 93 °C → 66 °C promptly once load was removed |
+
+**The throttling seen is power-limited, not thermal, and is correct behaviour.** Core clock drops
+off its 1243 MHz peak to 1076–1209 MHz occur precisely at the 95 W samples — the card meeting its
+power cap. A failing thermal interface produces the opposite signature: temperature-limited
+throttling near the 99 °C critical point with power well *under* cap. Combined with the fast
+cooldown, heat transfer off the die looks healthy. **No evidence the thermal paste has degraded**,
+though the card's VBIOS dates it to 2016/11/14 and there is no record anywhere in this repo, the
+FLDW change log, or the Obsidian vaults of it ever having been repasted.
+
+#### Finding — hardware video decode is unavailable (pre-existing, not upgrade damage)
+
+The soak was to have included an `ffmpeg h264_vaapi` encode loop to exercise the VCE ring. **It
+never ran** — every iteration failed instantly with `No usable encoding profile found`. Cause:
+
+- `vainfo` exposes **only** `VAProfileMPEG2Simple`, `VAProfileMPEG2Main`, and
+  `VAProfileJPEGBaseline`. No H.264, HEVC, or VP9, and **no encode entrypoints at all**.
+- Verified directly: `mpv --hwdec=vaapi` on an H.264 file logs `Looking at hwdec h264-vaapi...`
+  then falls back to **software decoding**.
+- Installed is stock Fedora `mesa-va-drivers`, which has H.264/HEVC/VC-1 **stripped for patent
+  reasons**. RPM Fusion's `mesa-va-drivers-freeworld` (available, `25.3.6-1.fc43`) supplies them
+  and is **not** installed.
+
+**This is not a hardware, driver, or card-age problem.** UVD firmware 1.130 and VCE firmware 53.26
+both reported `initialized successfully` at boot. Stock Fedora produces this same MPEG2-and-JPEG
+`vainfo` output on *every* GPU, including current models — it is a licensing packaging decision,
+not a support decision.
+
+**Is it upgrade damage? Probably not — but it cannot be proven either way.** RPM Fusion was
+verified available for F43 *before* the upgrade (see the baseline's third-party repo table), and
+the four other freeworld packages on this host — `libavcodec-freeworld`,
+`gstreamer1-plugins-bad-freeworld`, `vlc-plugins-freeworld`, `libheif-freeworld` — all came through
+at `fc43` versions. Had the upgrade been dropping freeworld packages as a class, those would be
+gone too. `dnf history` holds no record of `mesa-va-drivers-freeworld` ever being installed. The
+likeliest reading is that it was never installed and this gap long predates F43.
+
+**The consequence while it stands:** all H.264/HEVC video on this host decodes on the CPU —
+browsers, `mpv`, and Kasm Workspaces (which streams video by design) — while a working, initialized
+UVD block sits idle. On a host already running 67 containers that is wasted CPU and heat, most
+noticeably on 4K HEVC.
+
+**Open decision:** whether to `dnf install mesa-va-drivers-freeworld`. Expected to restore both
+decode *and* encode entrypoints, since stock Mesa strips both — verify with `vainfo` afterwards
+rather than assuming. The UVD ring therefore remains **untested** under kernel 7.1.x; the gfx ring
+is proven.
 
 ### QA-13 — Salt (removed — nothing to do)
 

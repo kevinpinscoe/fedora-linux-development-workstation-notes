@@ -121,11 +121,23 @@ This is a materially better starting position than F43 had, where the `sftpgo` r
 
 Inherited from the F43 upgrade, tracked in the repo root `CHECKPOINT.md`:
 
-- [ ] **Reboot and confirm the backup-timer burst is gone.** Eleven timers were fixed on
-      2026-08-01 (`Requires=` removed from `[Unit]`); the fix is verified structurally but not yet
-      behaviourally. Kevin is doing this Sunday.
-- [ ] **GPU soak (QA-12)** — 30+ minutes of real use including something GPU-intensive, then
-      re-check `journalctl -k`. Also Sunday. As above, this doubles as the F44 kernel answer.
+- [x] **Reboot and confirm the backup-timer burst is gone** — **DONE 2026-08-02.** The 15:40 boot
+      produced zero `*-backup.service` starts; the timers armed normally and fired no jobs. The
+      fix is now verified behaviourally, not just structurally.
+- [x] **GPU soak (QA-12)** — **DONE 2026-08-02, and it is the F44 kernel answer.** 35 minutes of
+      sustained `glmark2` load: **zero** GPU faults, ring timeouts, resets, or DRM errors. Peak
+      93 °C and 95.0 W against a 95 W cap, throttling power-limited rather than thermal. **GCN4 /
+      Polaris is healthy on kernel 7.1.5**, so the "old card on a new kernel" risk does not carry
+      into F44 — F44's kernel line is near-identical to F43's. Full results in QA-12 of
+      `../fedora-42-to-43-upgrade/FEDORA-UPGRADE-43.md`.
+      *Caveat:* the soak exercised the **gfx ring only**. The video (UVD) ring is still untested
+      because hardware H.264/HEVC decode is unavailable on this host — see the new prerequisite
+      below.
+- [ ] **Decide on `mesa-va-drivers-freeworld`.** Stock Fedora's `mesa-va-drivers` strips
+      H.264/HEVC for patent reasons, so all such video currently decodes on the CPU while the
+      card's initialized UVD block sits idle. RPM Fusion has the replacement
+      (`25.3.6-1.fc43`). Not upgrade damage as far as can be shown — but it should be settled
+      before another release lands on top. Details in QA-12 of the F43 checklist.
 - [ ] **Finish the F43 post-upgrade QA pass** in `../fedora-42-to-43-upgrade/FEDORA-UPGRADE-43.md`.
 - [ ] **Close out the root `TODO.md`** kernel/GCN4 research and write the finding back into the
       checklist, so this upgrade inherits an answer rather than the question.
@@ -135,6 +147,66 @@ Inherited from the F43 upgrade, tracked in the repo root `CHECKPOINT.md`:
       release on top; each needs to be updated, replaced, or deliberately dropped.
 - [ ] **`dnsmasq.service`** — failed since before the F43 upgrade, still failed. Fix or retire it
       rather than carrying it into a third release.
+
+---
+
+## Baseline gap to close before F44 — capture a package manifest
+
+**Raised 2026-08-02.** The F43 pre-upgrade baseline was thorough about *state* — services,
+containers, published ports, 38 backup timers, third-party repo readiness, snaps — but it never
+captured the **installed package list**. That gap surfaced immediately during F43 QA: on finding
+`mesa-va-drivers-freeworld` missing, there was no way to answer *"was it installed before the
+upgrade?"*, and `dnf history` did not settle it either.
+
+Being unable to answer that question is worse than the missing package itself. Any post-upgrade
+"is this thing missing because the upgrade dropped it?" is unanswerable without a before-picture,
+and third-party packages (RPM Fusion, COPR) are exactly the ones most likely to be dropped when a
+repo has not yet built for the new release.
+
+**Capture two manifests, not one.** They answer different questions:
+
+```bash
+# Full NEVRA — answers "what version was I on?"
+rpm -qa | sort > installed-packages-before-fedora-44-<DATE>.local.txt
+
+# Names only — answers "what disappeared?"
+rpm -qa --qf '%{NAME}\n' | sort -u > installed-package-names-before-fedora-44-<DATE>.local.txt
+```
+
+**Why two.** A dropped package cannot be found by diffing NEVRA lines, because *every* line
+changes when versions bump across a release. The comparison has to be name-against-name. And the
+name cannot be recovered from a NEVRA string by splitting on hyphens — most package names contain
+hyphens themselves, so `cut -d- -f1` turns `mesa-va-drivers-25.3.6-3.fc43.x86_64` into `mesa`.
+Only `rpm` knows where the name ends, so ask it directly with `--qf '%{NAME}\n'`.
+
+After the upgrade, the packages that vanished are then a clean one-liner:
+
+```bash
+rpm -qa --qf '%{NAME}\n' | sort -u > installed-package-names-after-fedora-44-<DATE>.local.txt
+comm -23 installed-package-names-before-fedora-44-<DATE>.local.txt \
+         installed-package-names-after-fedora-44-<DATE>.local.txt
+```
+
+Expect third-party packages (RPM Fusion, COPR) to dominate that list — they are the ones a major
+upgrade drops when the repo has not yet built for the new release.
+
+**Captured 2026-08-02**, ahead of any F44 work:
+
+| File | Lines | Answers |
+|---|---|---|
+| `installed-packages-before-fedora-44-2026-08-02.local.txt` | 8,480 | what version was installed |
+| `installed-package-names-before-fedora-44-2026-08-02.local.txt` | 8,236 | what was installed at all |
+
+- [x] Add the `rpm -qa` capture to the F44 pre-upgrade baseline procedure — **done 2026-08-02**,
+      both manifests captured and stored in this directory.
+- [ ] Re-capture both immediately before the upgrade actually runs — the 2026-08-02 files are a
+      useful early snapshot, but the authoritative before-picture is the one taken on the day.
+- [ ] Run the post-upgrade `comm` diff as an explicit QA step, rather than discovering gaps by
+      accident as happened with `mesa-va-drivers-freeworld` during F43 QA.
+- [x] Keep the manifests out of git — **done.** They carry the `.local.txt` suffix and
+      `.gitignore` now excludes `**/*.local.txt`. **This repo is public**, and an exact
+      software-and-version inventory of an internet-reachable host is the strongest
+      reconnaissance artifact it could contain.
 
 ---
 

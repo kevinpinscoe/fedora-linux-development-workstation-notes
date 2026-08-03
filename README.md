@@ -64,6 +64,15 @@ Notes and a step-by-step checklist for the in-place upgrade from Fedora 42 to Fe
 The actionable checklist (`FEDORA-UPGRADE-44.md`) is deliberately not written yet — see the notes
 file's "Next artifact" section for what has to be answered first.
 
+**Package manifests (untracked).** Two `rpm -qa` captures taken 2026-08-02 live in this directory
+as `installed-packages-before-fedora-44-2026-08-02.local.txt` (full NEVRA, 8,480 lines) and
+`installed-package-names-before-fedora-44-2026-08-02.local.txt` (names only, 8,236 lines). They
+exist because the F43 baseline never captured a package list, which made "was this package
+installed before the upgrade?" unanswerable during F43 QA. Both carry the `.local.txt` suffix and
+are gitignored — **this repo is public**, and an exact software-and-version inventory of an
+internet-reachable host is the strongest reconnaissance artifact it could hold. See the planning
+notes' "Baseline gap to close before F44" section for how to diff them after an upgrade.
+
 ## Runbooks
 
 Operational runbooks are indexed by the root [`RUNBOOK.md`](RUNBOOK.md):
@@ -75,10 +84,14 @@ Operational runbooks are indexed by the root [`RUNBOOK.md`](RUNBOOK.md):
 
 ## Open tasks
 
-Outstanding host work is tracked in [`TODO.md`](TODO.md) — currently researching whether kernel 7.x
-still supports the GCN4-era Radeon PRO WX 7100. Container-level work (the Glean decommission) moved
-to `/opt/containers/TODO.md` on 2026-08-01 (Glean is now stopped and disabled, with its data
-retained pending a decision on the stored articles).
+Outstanding host work is tracked in [`TODO.md`](TODO.md). The kernel 7.x / GCN4 question that
+dominated it was **largely answered on 2026-08-02**: a 35-minute instrumented GPU soak found zero
+faults on kernel 7.1.5, and Polaris/GCN4 is confirmed still fully supported rather than moved to
+legacy. What remains open there is the literature search and one untested subsystem — hardware
+video decode, which is unavailable on this host for packaging reasons unrelated to the card.
+Container-level work (the Glean decommission) moved to `/opt/containers/TODO.md` on 2026-08-01
+(Glean is now stopped and disabled, with its data retained pending a decision on the stored
+articles).
 
 ## Key issues documented
 
