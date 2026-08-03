@@ -90,6 +90,36 @@ unrelated to graphics or video, and long predates F43.
 
 ---
 
+## Three failed units — surfaced by F43 QA-1, but not upgrade damage
+
+**Raised:** 2026-08-03, during the F43 post-upgrade QA pass.
+**Status:** open — each diagnosed, none caused by the upgrade.
+
+All three failed on scheduled runs on 2026-08-03, two days after the upgrade, and each was
+traced to its own unrelated cause. They are listed here so they are not lost, and so a future
+reader does not mistake them for F43 fallout. Full context in QA-1 of
+`fedora-42-to-43-upgrade/FEDORA-UPGRADE-43.md`.
+
+- [ ] **`pcm-nightly-ingest-commit.service` (user unit) — git merge conflict needing triage.**
+      The failing host unit `check-pcm-nightly-ingest` is only the *monitor*, and it is working
+      correctly. The ingest job aborted because a standalone resync of `origin/main` into the
+      `ingest` branch conflicts outside the generated maps, in `moc/docker-containers.md` and
+      `notes/qa76-docker-sbom-command-...md`. Needs a human to resolve the conflict.
+      *This is not a regression of the 2026-08-01 fix* — that fix addressed a different fault.
+- [ ] **`youtrack-export.service` — bug in the exporter.**
+      `TypeError: 'int' object is not iterable` at
+      `~/Projects/private/youtrack.kevininscoe.com/scripts/export-all-youtrack-data/export.py:622`,
+      in `_names`, where `for v in seq or []` receives an `int`. A YouTrack API field is coming
+      back as a scalar where the script expects a sequence. The script **failed safe**: retention
+      was skipped, so the previous good export survives. Fix is a guard in `_names`.
+- [ ] **`recollindex-overnight.service` — timed out, 39.4 GB memory peak.**
+      Ran 01:00 → 05:03, consumed 30 min CPU, hit a **39.4 GB** memory peak, then was SIGKILLed
+      when the unit's timeout expired. Decide whether to raise the timeout, cap the indexer's
+      memory, or narrow what it indexes — a 39 GB peak is worth understanding before simply
+      granting it more time.
+
+---
+
 > **Glean's decommission moved out of this file on 2026-08-01.** It now lives in
 > `/opt/containers/TODO.md`, with the containers repo that manages it. Glean was stopped and
 > disabled before the F43 upgrade; its data is intact, and the open question is whether the stored

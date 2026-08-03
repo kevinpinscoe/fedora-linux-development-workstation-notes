@@ -686,16 +686,41 @@ getenforce                                       # expect: Enforcing
 systemctl --failed --no-pager                    # compare against the baseline list below
 ```
 
-- [ ] OS is Fedora 43
-- [ ] Kernel is **7.1.x** (note exact version — this is a major-version jump from 6.19; see Phase 3.4)
-- [ ] F42 kernels still listed in GRUB as fallback
-- [ ] RPM 6.x confirmed (this is the meaningful package-stack change; DNF was already 5.x)
-- [ ] SELinux Enforcing
-- [ ] **Failed units — do not expect zero.** Already failing immediately before the upgrade
-      (revised 2026-08-01): `check-ai-skill-jobs`, `check-changelog-roll`, `dnsmasq`,
-      `github-poll-for-activity`, ~10 `drkonqi-coredump-processor@*` instances, and a transient
-      `drill-execstartpost-*` test unit. `check-pcm-nightly-ingest` and `gitea-backup` were both
-      fixed on 2026-08-01 and **should not** reappear. Only **new** names are upgrade damage.
+**PASSED 2026-08-03.**
+
+- [x] OS is Fedora 43 — `Fedora release 43 (Forty Three)`
+- [x] Kernel is **7.1.x** — exact version **`7.1.5-101.fc43.x86_64`**
+- [x] F42 kernels still listed in GRUB as fallback — all three retained (`6.19.14-108`,
+      `6.19.13-100`, `6.19.8-100`) plus rescue. Verified with `grubby --info=ALL`: five bootable
+      entries, F43 at index 0 and the F42 kernels at 1–3, BLS configs present in
+      `/boot/loader/entries/`. `GRUB_ENABLE_BLSCFG=true`, `GRUB_DEFAULT=saved`, default title is
+      the F43 kernel. **The rollback path is intact.**
+      *Gotcha:* `ls /boot/loader/entries/` returns nothing as an ordinary user — the directory is
+      root-only. Use `sudo`, or the fallback looks absent when it is not.
+- [x] RPM 6.x confirmed — **`RPM version 6.0.2`** (baseline 4.20.1). DNF is `dnf5 5.2.18.0`, which
+      as the checklist notes was already 5.x on F42 and is not a signal.
+- [x] SELinux Enforcing
+- [x] **Failed units — compared against the baseline; no upgrade damage found.** Seven units are
+      failed. Four are expected: `check-changelog-roll`, `dnsmasq`, `github-poll-for-activity`,
+      and one `drkonqi-coredump-processor@*` (down from ~10). `check-ai-skill-jobs` and
+      `gitea-backup` are **no longer failing** — an improvement on the baseline.
+      Three names are new, and **all three were individually diagnosed as unrelated to the
+      upgrade** — each failed on a scheduled run on 2026-08-03, two days after it:
+      - `check-pcm-nightly-ingest` — not a regression of the 2026-08-01 fix. This unit is a
+        *monitor*, and it is working correctly: the job it watches,
+        `pcm-nightly-ingest-commit.service` (a **user** unit), aborted on a git merge conflict in
+        the PCM vault needing human triage (`moc/docker-containers.md` and one `notes/` file).
+        Content conflict, not a host fault.
+      - `youtrack-export` — application bug in Kevin's own exporter:
+        `TypeError: 'int' object is not iterable` at `export.py:622` in `_names`. A YouTrack API
+        response shape the script does not handle. The script failed safe — retention was skipped,
+        so the previous export survives.
+      - `recollindex-overnight` — `Result=timeout`. Ran 01:00 → 05:03, consumed 30 min CPU and a
+        **39.4 GB memory peak**, then was SIGKILLed. A resource/duration problem in the indexer,
+        not a package or kernel fault.
+
+      None of the three belongs to this upgrade. They are tracked as separate host work, not as
+      QA-1 failures.
 
 ### QA-2 — Core System Services
 
@@ -711,12 +736,17 @@ rpm -q moby-engine docker-cli docker-compose containerd.io
 rpm -qa | grep -i '^salt' || echo 'salt absent — removed 2026-08-01, expected'
 ```
 
-- [ ] httpd running
-- [ ] Tailscale connected: `tailscale status`
-- [ ] certbot-renew.timer active and scheduled
-- [ ] snapd running
-- [ ] Docker Engine running, `moby-engine` on 29.6.2-1.fc43
-- [ ] Salt still absent (removed pre-upgrade — nothing to check)
+**PASSED 2026-08-03 — all six green.**
+
+- [x] httpd running — active, enabled
+- [x] Tailscale connected — `tailscaled` active/enabled, `tailscale status` reports this host
+      online with its peers
+- [x] certbot-renew.timer active and scheduled — active/enabled, last run 06:55, next 13:24
+- [x] snapd running — active, enabled
+- [x] Docker Engine running, `moby-engine` on 29.6.2-1.fc43 — confirmed. `docker --version`
+      reports `29.6.2, build 1.fc43`; `docker-cli` 29.6.2-1.fc43, `docker-compose` 5.3.1-1.fc43,
+      `containerd.io` 2.2.6-1.fc43. All on fc43, no fc42 remnants in the container stack.
+- [x] Salt still absent — `rpm -qa | grep '^salt'` returns nothing, as expected
 
 ### QA-3 — SELinux AVC Denials
 
@@ -726,9 +756,14 @@ sudo ausearch -m avc -ts today --no-pager 2>/dev/null | tail -40
 sudo ausearch -m avc -ts today -c docker --no-pager 2>/dev/null | tail -20
 ```
 
-- [ ] No unexpected AVC denials for container services
-- [ ] No denials for Docker socket access
-- [ ] If denials exist: note the `scontext` and `tcontext`, check relevant RUNBOOK
+**PASSED 2026-08-03 — zero denials.**
+
+- [x] No unexpected AVC denials for container services — **zero AVCs** since boot and zero for
+      the whole of today
+- [x] No denials for Docker socket access — `ausearch -m avc -c docker` returns nothing
+- [x] If denials exist: note the `scontext` and `tcontext`, check relevant RUNBOOK — n/a, none
+      exist. This is the third independent confirmation the 2026-08-01 SELinux policy repair held:
+      clean across the reboot, the two GPU soaks, and this sweep.
 
 ### QA-4 — Docker and All Containers
 
@@ -738,12 +773,26 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' | sort
 docker ps --filter status=exited --format 'table {{.Names}}\t{{.Status}}'
 ```
 
-- [ ] Container count back to **67 running** (baseline 73, less Glean's six — down by design)
-- [ ] All expected containers show `Up` — none unexpectedly in `Exited` or `Restarting`
-- [ ] The 20 unit-less stacks were brought up by hand (Phase 5.1) — they do **not** auto-start
-- [ ] All 11 `label:disable` stacks running (list in the `.local.md` baseline — see Phase 5.3)
-- [ ] Expected exceptions, all by design: the 8 Kasm containers stay exited, Glean's six stay down,
-      and `youtrack.corrupt-20260729` stays down
+**PASSED 2026-08-03.**
+
+- [x] Container count back to **67 running** — exactly 67, matching the predicted count
+- [x] All expected containers show `Up` — **zero** restarting, **zero** unhealthy
+- [x] The 20 unit-less stacks were brought up by hand (Phase 5.1) — not needed in the end. They
+      came up on their own at the 2026-08-01 reboot and are still up across the 2026-08-02 reboot.
+- [x] All `label:disable` stacks running — with two naming corrections to the baseline list:
+      - **`filestash` and `home_file_server` are the same stack, not two.** The compose file at
+        `/opt/containers/filestash/docker-compose.yml` declares
+        `container_name: home_file_server` on the `machines/filestash` image. Searching for a
+        container called `filestash` finds nothing and reads as a missing service. The baseline's
+        "11 stacks, not 4" is really **10 distinct stacks**.
+      - **`woodpecker-ci` runs as two containers**, `woodpecker-server` and `woodpecker-agent`,
+        both healthy. The baseline named the stack, not the containers.
+- [x] Expected exceptions, all by design — 17 containers are exited: the 8 `kasm_*`, plus 9
+      months-old scratch containers unrelated to the upgrade (`pastebooks-dev`,
+      `sourcehut-demo-nginx-1`, `docker-valkey-1`, and six auto-named leftovers, all last exited
+      4–9 months ago). Glean's six are **absent entirely** rather than exited — the containers
+      were removed, not just stopped. `youtrack` itself is up; no `youtrack.corrupt-20260729`
+      container exists to start by accident.
 
 ### QA-5 — Container Health Endpoints
 
