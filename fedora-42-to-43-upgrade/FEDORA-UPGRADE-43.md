@@ -850,15 +850,43 @@ for c in metabase-postgres wallabag-db wikijs-db pastebooks-db; do   # glean-pos
 done
 ```
 
-- [ ] Port sweep: every port that was listening at baseline is listening again
-- [ ] OpenBao unsealed (see QA-6)
-- [ ] Garage reports healthy
-- [ ] Gitea API responds and its SSH port answers
-- [ ] RSSHub returns feed data
-- [ ] Woodpecker agent reconnected to the server
-- [ ] YouTrack finished migrating and returns 200
-- [ ] Kroki renders a diagram
-- [ ] All backing databases report `healthy`
+**PASSED 2026-08-03 — 41 published ports swept, every service accounted for, nothing down.**
+
+- [x] Port sweep: every port that was listening at baseline is listening again — **41 ports**
+      (baseline 40). Two returned `000` and **both are false alarms from probing with the wrong
+      protocol**, not dead services:
+      - **2223 — Gitea SSH, not HTTP.** Verified properly with `ssh -T -p 2223`, which
+        authenticated: *"You've successfully authenticated with the key named kinscoe@kevin"*.
+      - **8000 — checkmk over HTTPS.** `curl http://` cannot speak to a TLS listener and yields
+        `000`. `curl -k https://127.0.0.1:8000/` returns **404**, so the server is responding.
+      Every other non-200 is normal and expected: `400` on garage:3903 (S3 API rejecting a bare
+      GET), `403` on garage:26771 (admin API wanting auth), `404` on c3x-api (no root route), and
+      assorted `302`/`307` auth redirects (checkmk, pgadmin, wallabag, openbao, convertx, lxconsole,
+      karakeep, cadvisor).
+- [x] OpenBao unsealed (see QA-6) — initialized, unsealed, active
+- [x] Garage reports healthy — **the `docker exec garage garage status` command in this checklist
+      cannot work.** The image is **distroless**: it has no `sh` and no `garage` on `PATH`, so the
+      exec fails with `executable file not found in $PATH`. That is an artifact of the check, not a
+      fault. Garage is confirmed up over HTTP — 3903 → 400 and 26771 → 403, both correct responses
+      for an unauthenticated bare GET against the S3 and admin APIs.
+- [x] Gitea API responds and its SSH port answers — API reports **`{"version":"1.25.4"}`**; SSH on
+      2223 authenticates as above
+- [x] RSSHub returns feed data — `/healthz` returns `ok`
+- [x] Woodpecker agent reconnected to the server — both `woodpecker-server` and `woodpecker-agent`
+      are `Up 21 hours (healthy)`. The checklist's `grep -i 'connect\|error'` finds nothing because
+      the agent logs only two startup lines; the Docker healthcheck is the stronger signal.
+- [x] YouTrack finished migrating and returns 200 — 200 locally and at
+      `https://youtrack.kevininscoe.com/`
+- [x] Kroki renders a diagram — **the encoded diagram string in this checklist is corrupt** and
+      returns `400`. Kroki itself is fine: a freshly-encoded diagram returns **200** and real SVG,
+      by both GET and POST. Generate the string rather than reusing the literal:
+      ```bash
+      ENC=$(python3 -c "import zlib,base64;print(base64.urlsafe_b64encode(zlib.compress(b'digraph G {Hello->World}',9)).decode())")
+      curl -s -o /dev/null -w '%{http_code}\n' "http://$(docker port kroki-core 8000 | head -1)/graphviz/svg/$ENC"
+      ```
+- [x] All backing databases report `healthy` — `metabase-postgres`, `wallabag-db`, `wikijs-db`,
+      `pastebooks-db` all `healthy`. Swept the whole fleet as well: **no container anywhere reports
+      an unhealthy healthcheck.**
 
 **[HUMAN]** — spot-check a few UIs in browser to confirm they render correctly (not just HTTP 200):
 - [ ] Gitea: `https://git.kevininscoe.com` — login works, repos visible
@@ -872,9 +900,15 @@ done
 curl -s https://openbao.kevininscoe.com/v1/sys/health | python3 -m json.tool
 ```
 
-- [ ] `"initialized": true`
-- [ ] `"sealed": false`
-- [ ] `"standby": false`
+**PASSED 2026-08-03 — no unsealing needed.**
+
+- [x] `"initialized": true`
+- [x] `"sealed": false`
+- [x] `"standby": false`
+
+OpenBao **2.5.2**, cluster `vault-cluster-3b8b6f0d`, responding over HTTPS. Note the pre-upgrade
+warning that OpenBao "seals on every restart" did **not** bite here — it came through both the
+2026-08-01 and 2026-08-02 reboots unsealed and did not need the 3 keys.
 
 If sealed, unseal with 3 keys (see openbao RUNBOOK.md).
 
@@ -885,8 +919,18 @@ If sealed, unseal with 3 keys (see openbao RUNBOOK.md).
 sudo docker logs youtrack --tail 30 2>&1 | grep -E "ready|migration|error"
 ```
 
-- [ ] Log contains "YouTrack is ready" (not still migrating)
-- [ ] No ERROR lines in last 30 log entries
+**PASSED 2026-08-03.**
+
+- [x] Log contains "YouTrack is ready" (not still migrating) — **the grep as written returns
+      nothing, and that is a false alarm.** The container has been up ~10 hours, so the startup
+      banner has long since rolled out of `--tail 30`. This check is only meaningful in the first
+      minutes after a restart. Health confirmed instead by live activity: current `INFO` logging
+      (permission-cache rebuilds, workflow script attachment) and `https://youtrack.kevininscoe.com/`
+      returning **200**.
+- [x] No ERROR lines in last 30 log entries — none present.
+
+Separately: `youtrack-export.service` (the daily exporter, a different unit) **is** failing, on an
+application bug unrelated to the upgrade. See QA-1 and `TODO.md`.
 
 ### QA-8 — Backup Scripts Still Executable
 
@@ -921,7 +965,23 @@ Scripts that a unit execs directly must show `bin_t`. If one shows `container_fi
 sudo chcon -t bin_t /opt/containers/<name>/backup.sh
 ```
 
-- [ ] All backup.sh files have `bin_t` label
+- [x] All backup.sh files have `bin_t` label — **PASSED 2026-08-03, but the check as written
+      points at the wrong directory.** Verified by checking each unit's `ExecStart` first, per the
+      2026-08-01 correction above.
+
+      **All 13 `/opt/containers/*/backup.sh` are `container_file_t`, and that is correct** — not
+      one of them is exec'd directly. Reading the raw label list alone would suggest 13 broken
+      scripts; it does not.
+
+      **The scripts that are exec'd directly live in `/usr/local/sbin/automation/`, not under
+      `/opt/containers`.** Ten `*-backup.service` units point there — `actualbudget`, `argus`,
+      `checkmk`, `karakeep`, `kavita`, `n8n`, `pastebooks`, `portainer`, `wikijs`, `youtrack`.
+      Every script in that directory carries **`bin_t`**, so nothing is broken. That directory is
+      what a future run of this check should inspect.
+
+      `gitea-backup` — the unit that broke this way on 2026-08-01 — now has
+      `ExecStart=/bin/bash <script>`, so it no longer execs directly and cannot regress the same
+      way. No `*-backup.service` is in a failed state.
 
 ### QA-9 — Backup Timers Active
 
@@ -931,9 +991,22 @@ systemctl list-timers --all | grep -E "backup|verify"
 ls -l /etc/cron.d/glean-backup && systemctl is-active crond
 ```
 
-- [ ] All **38** backup/verify timers listed and showing a next trigger time (full list in the baseline)
-- [ ] No timer in `failed` state
-- [ ] Glean's cron backup entry survived the upgrade and `crond` is active
+**PASSED 2026-08-03**, with one piece of stale cruft found — see the Glean item.
+
+- [x] All **38** backup/verify timers listed and showing a next trigger time — **39** now match,
+      one more than the baseline, all with a next trigger.
+      *Watch out for a display artifact:* `systemctl list-timers` can show `-` in the NEXT column
+      for a timer that fired seconds earlier. `backupmysql.timer` looked like it had no next run;
+      `systemctl show -p NextElapseUSecRealtime` confirmed it was scheduled normally. Query the
+      property rather than trusting the table.
+- [x] No timer in `failed` state — none.
+- [x] Glean's cron backup entry survived the upgrade and `crond` is active — it survived, `crond`
+      is active, **and that is now a problem rather than a pass.** This check predates Glean's
+      decommission on the same day. `/etc/cron.d/glean-backup` still runs
+      `/opt/containers/glean/backup-glean.sh` as root nightly at 02:30, and it has been **failing
+      every night since**: `/var/log/glean-backup.log` contains only
+      `Error response from daemon: No such container: glean-postgres`.
+      It fails silently — cron does not alert, and nothing watches that log. Tracked in `TODO.md`.
 
 Run one manual backup to confirm the full pipeline works end-to-end:
 ```bash
@@ -941,7 +1014,11 @@ sudo systemctl start woodpecker-ci-backup.service
 journalctl -u woodpecker-ci-backup.service -n 20 --no-pager
 ```
 
-- [ ] Manual backup completes without error
+- [x] Manual backup completes without error — **PASSED 2026-08-03.**
+      `woodpecker-ci-backup.service` ran clean end to end: wrote
+      `/home/backups/woodpecker-ci/woodpecker-ci-2026-08-03.tar.gz` (1.9 MB), sent its
+      `gatus-ping` heartbeat (`success=true`), and deactivated successfully. Confirms the full
+      pipeline — script, SELinux labels, Docker, destination, and monitoring — works under F43.
 
 ### QA-10 — Kasm Workspaces
 

@@ -112,6 +112,15 @@ reader does not mistake them for F43 fallout. Full context in QA-1 of
       in `_names`, where `for v in seq or []` receives an `int`. A YouTrack API field is coming
       back as a scalar where the script expects a sequence. The script **failed safe**: retention
       was skipped, so the previous good export survives. Fix is a guard in `_names`.
+- [ ] **Stale Glean cron entry failing silently every night.** Found by QA-9 on 2026-08-03.
+      `/etc/cron.d/glean-backup` still runs `/opt/containers/glean/backup-glean.sh` as root at
+      02:30 daily, but Glean was decommissioned on 2026-08-01 and its containers were removed.
+      Every run fails with `Error response from daemon: No such container: glean-postgres`,
+      appended to `/var/log/glean-backup.log`. **Nothing alerts on it** — cron is silent and no
+      monitor watches that log, so it would have run failing indefinitely.
+      Remove the cron entry when Glean's fate is settled (the retained data question is tracked in
+      `/opt/containers/TODO.md`). Removing a `/etc/cron.d` entry is a host change and needs an
+      FLDW changelog entry.
 - [ ] **`recollindex-overnight.service` — timed out, 39.4 GB memory peak.**
       Ran 01:00 → 05:03, consumed 30 min CPU, hit a **39.4 GB** memory peak, then was SIGKILLed
       when the unit's timeout expired. Decide whether to raise the timeout, cap the indexer's
