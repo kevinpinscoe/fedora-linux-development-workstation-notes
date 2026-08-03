@@ -1006,7 +1006,14 @@ ls -l /etc/cron.d/glean-backup && systemctl is-active crond
       `/opt/containers/glean/backup-glean.sh` as root nightly at 02:30, and it has been **failing
       every night since**: `/var/log/glean-backup.log` contains only
       `Error response from daemon: No such container: glean-postgres`.
-      It fails silently — cron does not alert, and nothing watches that log. Tracked in `TODO.md`.
+      It fails silently — cron does not alert, and nothing watches that log.
+      **Removed 2026-08-03**, backed up to
+      `/home/backups/removed-cron-entries/glean-backup.removed-20260803` first. Logged in
+      `~/ai/fedora/CHANGELOG.md` (`dc0dcab`). Glean's data and script were left in place; only the
+      schedule was removed.
+      **For the next upgrade: rewrite this check.** "Did the cron entry survive?" is the wrong
+      question — it survived, and that was the fault. Ask instead whether each surviving scheduled
+      job still has a service to act on.
 
 Run one manual backup to confirm the full pipeline works end-to-end:
 ```bash

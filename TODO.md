@@ -112,15 +112,26 @@ reader does not mistake them for F43 fallout. Full context in QA-1 of
       in `_names`, where `for v in seq or []` receives an `int`. A YouTrack API field is coming
       back as a scalar where the script expects a sequence. The script **failed safe**: retention
       was skipped, so the previous good export survives. Fix is a guard in `_names`.
-- [ ] **Stale Glean cron entry failing silently every night.** Found by QA-9 on 2026-08-03.
-      `/etc/cron.d/glean-backup` still runs `/opt/containers/glean/backup-glean.sh` as root at
-      02:30 daily, but Glean was decommissioned on 2026-08-01 and its containers were removed.
-      Every run fails with `Error response from daemon: No such container: glean-postgres`,
-      appended to `/var/log/glean-backup.log`. **Nothing alerts on it** — cron is silent and no
-      monitor watches that log, so it would have run failing indefinitely.
-      Remove the cron entry when Glean's fate is settled (the retained data question is tracked in
-      `/opt/containers/TODO.md`). Removing a `/etc/cron.d` entry is a host change and needs an
-      FLDW changelog entry.
+- [x] **Stale Glean cron entry failing silently every night — REMOVED 2026-08-03.**
+      Found by QA-9. `/etc/cron.d/glean-backup` ran `/opt/containers/glean/backup-glean.sh` as
+      root at 02:30 daily, but Glean was decommissioned on 2026-08-01 and its containers removed,
+      so every run failed with `Error response from daemon: No such container: glean-postgres`.
+      **Nothing alerted on it** — cron is silent on non-zero exit, no monitor watched the log, and
+      with no systemd unit it fell outside `systemctl --failed` and `check-all-backups.sh` alike.
+      Backed up to `/home/backups/removed-cron-entries/glean-backup.removed-20260803`, then
+      deleted. No `glean` references remain in `/etc/cron.d`, `/etc/crontab`, `/etc/cron.daily` or
+      `/etc/logrotate.d`; `crond` still active. `/opt/containers/glean/` and its script were left
+      in place — the stored-articles question stays in `/opt/containers/TODO.md`.
+      Logged: `~/ai` `dc0dcab`, pushed.
+
+- [ ] **Sweep for other cron-only jobs with no monitoring.** Raised 2026-08-03 by the item above.
+      The Glean entry failed nightly for two days unnoticed because a `/etc/cron.d` job has no
+      systemd unit, so it is invisible to `systemctl --failed`, to `~/admin/check-all-backups.sh`,
+      and to the Telegram alert paths — the three places a failure would normally surface.
+      Any other cron-only job on this host has the same blind spot. Enumerate `/etc/cron.d`,
+      `/etc/crontab`, `/etc/cron.*`, and user crontabs, and decide per job whether to convert it to
+      a systemd unit + timer (which `when-establishing-monitoring-for-a-job-or-service.md` would
+      then cover) or to give it explicit alerting.
 - [ ] **`recollindex-overnight.service` — timed out, 39.4 GB memory peak.**
       Ran 01:00 → 05:03, consumed 30 min CPU, hit a **39.4 GB** memory peak, then was SIGKILLed
       when the unit's timeout expired. Decide whether to raise the timeout, cap the indexer's
