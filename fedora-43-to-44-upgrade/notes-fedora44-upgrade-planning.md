@@ -130,14 +130,15 @@ Inherited from the F43 upgrade, tracked in the repo root `CHECKPOINT.md`:
       Polaris is healthy on kernel 7.1.5**, so the "old card on a new kernel" risk does not carry
       into F44 — F44's kernel line is near-identical to F43's. Full results in QA-12 of
       `../fedora-42-to-43-upgrade/FEDORA-UPGRADE-43.md`.
-      *Caveat:* the soak exercised the **gfx ring only**. The video (UVD) ring is still untested
-      because hardware H.264/HEVC decode is unavailable on this host — see the new prerequisite
-      below.
-- [ ] **Decide on `mesa-va-drivers-freeworld`.** Stock Fedora's `mesa-va-drivers` strips
-      H.264/HEVC for patent reasons, so all such video currently decodes on the CPU while the
-      card's initialized UVD block sits idle. RPM Fusion has the replacement
-      (`25.3.6-1.fc43`). Not upgrade damage as far as can be shown — but it should be settled
-      before another release lands on top. Details in QA-12 of the F43 checklist.
+      The **video engines were proven separately on 2026-08-03** — see the next item.
+- [x] **`mesa-va-drivers-freeworld` — installed 2026-08-03, both arches.** Stock Fedora's
+      `mesa-va-drivers` strips H.264/HEVC for patent reasons, so all such video had been decoding
+      on the CPU while the card's initialized UVD block sat idle. VAAPI profiles went **3 → 15**,
+      restoring H.264 and HEVC decode *and* encode. A 15-minute soak of simultaneous 4K HEVC
+      decode and H.264 encode found **zero** faults. Not upgrade damage as far as could be shown.
+      **Carry into F44:** `mesa-va-drivers-freeworld` is an RPM Fusion package, so it is exactly
+      the class most likely to be dropped if the repo has not built for the new release when the
+      upgrade runs. Check it explicitly in the post-upgrade package diff.
 - [ ] **Finish the F43 post-upgrade QA pass** in `../fedora-42-to-43-upgrade/FEDORA-UPGRADE-43.md`.
 - [ ] **Close out the root `TODO.md`** kernel/GCN4 research and write the finding back into the
       checklist, so this upgrade inherits an answer rather than the question.

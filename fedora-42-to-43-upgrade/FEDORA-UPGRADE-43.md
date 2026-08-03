@@ -937,10 +937,13 @@ systemctl status snapd --no-pager
 > step, on a GCN4-era Radeon PRO WX 7100. That combination has not been researched and is now the
 > single largest unknown in the upgrade. Watch it properly rather than treating it as a formality.
 
-> **ANSWERED 2026-08-02 — the card is fine on kernel 7.1.5.** A 35-minute instrumented soak found
-> **zero** GPU faults, ring timeouts, resets, or DRM errors. The biggest unresearched risk carried
-> into F43 is now closed, and the same answer carries forward to F44 (see
+> **ANSWERED — the card is fine on kernel 7.1.5, and QA-12 is CLOSED.** Two soaks found **zero**
+> GPU faults, ring timeouts, resets, or DRM errors: 35 minutes on the gfx ring (2026-08-02) and
+> 15 minutes on the UVD/VCE video engines (2026-08-03). The biggest unresearched risk carried into
+> F43 is closed, and the same answer carries forward to F44 (see
 > `../fedora-43-to-44-upgrade/notes-fedora44-upgrade-planning.md`).
+> The video leg required installing `mesa-va-drivers-freeworld` first — see the resolved finding
+> at the end of this section.
 
 **[HUMAN]** — monitor through at least 30 minutes of normal use, including something GPU-intensive:
 
@@ -987,7 +990,7 @@ cooldown, heat transfer off the die looks healthy. **No evidence the thermal pas
 though the card's VBIOS dates it to 2016/11/14 and there is no record anywhere in this repo, the
 FLDW change log, or the Obsidian vaults of it ever having been repasted.
 
-#### Finding — hardware video decode is unavailable (pre-existing, not upgrade damage)
+#### Finding — hardware video decode was unavailable (pre-existing, not upgrade damage) — FIXED 2026-08-03
 
 The soak was to have included an `ffmpeg h264_vaapi` encode loop to exercise the VCE ring. **It
 never ran** — every iteration failed instantly with `No usable encoding profile found`. Cause:
@@ -1018,10 +1021,57 @@ browsers, `mpv`, and Kasm Workspaces (which streams video by design) — while a
 UVD block sits idle. On a host already running 67 containers that is wasted CPU and heat, most
 noticeably on 4K HEVC.
 
-**Open decision:** whether to `dnf install mesa-va-drivers-freeworld`. Expected to restore both
-decode *and* encode entrypoints, since stock Mesa strips both — verify with `vainfo` afterwards
-rather than assuming. The UVD ring therefore remains **untested** under kernel 7.1.x; the gfx ring
-is proven.
+#### Resolved 2026-08-03 — codecs restored, and the video engines pass too
+
+`mesa-va-drivers-freeworld` 25.3.6-1.fc43 installed from RPM Fusion, **both arches**:
+
+```bash
+sudo dnf install --allowerasing mesa-va-drivers-freeworld.x86_64 mesa-va-drivers-freeworld.i686
+```
+
+**Install both arches.** `dnf swap mesa-va-drivers mesa-va-drivers-freeworld` proposes removing
+*both* arches of the stock package while installing only `x86_64`, which would leave 32-bit VAAPI
+with no driver. Steam, Wine 11.0 and Bottles are installed here alongside a full 32-bit graphics
+stack (`mesa-dri-drivers.i686`, `mesa-libGL.i686`, `mesa-vulkan-drivers.i686`, `libva.i686`), so
+the `i686` driver is genuinely used. In the event nothing needed erasing — the freeworld driver
+installs to `/usr/lib64/dri-freeworld/` and `libva` prefers that path, so both packages coexist.
+
+**VAAPI profiles went 3 → 15.** Decode now covers MPEG2, VC-1, H.264 (Constrained
+Baseline/Main/High), **HEVC Main, HEVC Main 10**, and JPEG. Encode came back as well — H.264 (all
+three profiles) and HEVC Main — since stock Mesa strips both directions, not just decode.
+
+**Video-engine soak — 2026-08-03 06:48–07:03, 15 minutes, 60 samples.** Both engines driven at
+once: `mpv --hwdec=vaapi-copy` on a 3840x2160 HEVC Main 10 film (UVD decode) plus an
+`ffmpeg h264_vaapi` encode loop (VCE encode) — the workload that could not run at all before.
+
+| Metric | Result |
+|---|---|
+| Kernel GPU / UVD / VCE faults | **0** |
+| Software-decode fallbacks | **0** — hardware decode held for the full run |
+| Decode errors / encode errors | **0** / **0** |
+| Edge temperature | mean 86.6 °C, peak 91 °C |
+| Power (PPT) | mean 46.3 W, peak 49.2 W (cap 95 W) |
+| Idle after | 66 °C / 25 W — back to baseline |
+
+**Qualifier on the decode leg:** `--untimed` did not take effect as intended. The film advanced
+15 minutes of content in 15 minutes of wall time, so decoding ran at **playback rate**, not
+maximum throughput. This is a sustained realistic workload — which is what QA-12 asks for — but
+it is not a UVD saturation test, and should not be read as one.
+
+Note the video engines draw far less power than the gfx ring: ~46 W sustained versus the 95 W cap
+the `glmark2` soak hit. Temperature still reached 91 °C, because the fan ramped only to ~1,650 RPM
+here against 3,617 RPM during the gfx soak. Not a fault — worth knowing when reading GPU
+temperatures on this host.
+
+**Diagnostic trap worth recording.** `mpv --hwdec=vaapi` with a video output that cannot display
+hardware frames (`--vo=null`) silently reports `Using software decoding`. That reads exactly like a
+broken driver and cost real time during this investigation. Use `--hwdec=vaapi-copy` when testing
+headless. Likewise, `ffmpeg` prints the base decoder name (`hevc (native)`) in its stream mapping
+even when a hwaccel *is* attached — check for `Format vaapi chosen by get_format()` in
+`-loglevel debug` output instead of trusting the mapping line.
+
+**QA-12 is closed.** Both rings proven on kernel 7.1.5: gfx on 2026-08-02, UVD and VCE on
+2026-08-03.
 
 ### QA-13 — Salt (removed — nothing to do)
 

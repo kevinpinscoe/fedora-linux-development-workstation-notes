@@ -76,15 +76,17 @@ unrelated to graphics or video, and long predates F43.
       rather than the question — 2026-08-02. Written into QA-12 of the F43 checklist and into the
       F44 planning notes' prerequisites.
 
-### Left open by the soak
+### Closed by the second soak — 2026-08-03
 
-- [ ] **Hardware video decode is unavailable, so the UVD ring is untested.** Stock Fedora's
-      `mesa-va-drivers` strips H.264/HEVC for patent reasons; `vainfo` offers only MPEG2 and JPEG,
-      and `mpv --hwdec=vaapi` falls back to software. RPM Fusion's `mesa-va-drivers-freeworld`
-      (`25.3.6-1.fc43`) supplies the missing codecs and is not installed.
-      **This is a packaging gap, not a hardware or card-age problem** — stock Fedora behaves the
-      same way on current GPUs. Decide whether to install it, then re-run a decode soak to close
-      the UVD gap. Full detail in QA-12 of the F43 checklist.
+- [x] **Hardware video decode restored and the UVD/VCE rings proven.**
+      `mesa-va-drivers-freeworld` `25.3.6-1.fc43` installed from RPM Fusion, **both arches**
+      (the `i686` one matters — Steam, Wine and Bottles use the 32-bit graphics stack). VAAPI
+      profiles went **3 → 15**; H.264 and HEVC decode *and* encode all came back.
+      A 15-minute soak driving 4K HEVC Main 10 decode and H.264 encode simultaneously found
+      **zero** faults, zero software-decode fallbacks, and zero encode errors.
+      This was a packaging gap, not a hardware or card-age problem — stock Fedora strips these
+      codecs for patent reasons on every GPU, current models included.
+      Logged in `~/ai/fedora/CHANGELOG.md`; full detail in QA-12 of the F43 checklist.
 
 ---
 
