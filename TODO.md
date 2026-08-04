@@ -2,6 +2,36 @@
 
 Human-owned task list for this host. Delete this file once every item is checked off.
 
+## FIRST — restore `setroubleshootd` (a safety net is currently switched off)
+
+**Raised:** 2026-08-03. **Priority: do this before anything else in this file.**
+
+- [ ] **Unmask and restart `setroubleshootd`.**
+      ```bash
+      sudo systemctl unmask setroubleshootd
+      sudo systemctl start setroubleshootd
+      systemctl is-active setroubleshootd    # expect: active
+      ```
+
+**Why it is off.** A failed attempt to convert `~/bin/backup.sh` from cron to systemd on
+2026-08-03 put `rsync` into the confined `rsync_t` SELinux domain, generating ~3,700 AVC denials
+in a few minutes. `setroubleshootd` raised a KDE desktop notification for each one and made the
+desktop unusable, so it was stopped and masked at Kevin's instruction to restore usability.
+
+**Why this must not stay this way.** Masking `setroubleshootd` disables the *only* channel that
+puts an unexpected SELinux denial in front of a human on this workstation. Auditing itself is
+untouched — `sudo ausearch -m avc -ts today` and `sudo sealert -a /var/log/audit/audit.log` still
+work — but nothing will *tell* anyone; it has to be gone looking for. This is a temporarily
+disabled safety net of exactly the kind that quietly becomes permanent, which is why it is the
+first item in this file rather than a footnote to the backup work.
+
+**Do it once the `/home_backup` and `/root_backup` label repair is settled** — until then a
+relabel pass could itself produce denials and re-flood the desktop.
+
+Verified while masking: the mask genuinely holds. `org.fedoraproject.Setroubleshootd.service`
+delegates through `SystemdService=setroubleshootd.service` with `Exec=/bin/false`, so D-Bus
+activation defers to systemd and cannot start it behind the mask.
+
 ## Research: kernel 7.x on the Radeon PRO WX 7100 (GCN4)
 
 **Raised:** 2026-08-01, during the Fedora 42 → 43 upgrade prep.
