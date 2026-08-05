@@ -21,7 +21,7 @@ fedora-linux-development-workstation-notes/
 ├── CLAUDE.md                 # Repo conventions + system context (for coding assistants)
 ├── README.md                  # Repo index (this file)
 ├── RUNBOOK.md                 # Root runbook index → points to subdirectory runbooks
-├── TODO.md                    # Open host tasks (kernel 7.x / GCN4 GPU research)
+├── TODO.md                    # Open tasks from this upgrade (GPU research, failed units)
 ├── SELINUX_SETUP.md           # SELinux + container labeling notes and fixes
 ├── fedora-42-to-43-upgrade/   # In-place upgrade notes (Fedora 42 → 43)
 │   ├── FEDORA-UPGRADE-43.md              # Full upgrade checklist (pre-upgrade → QA sign-off)
@@ -84,11 +84,23 @@ Operational runbooks are indexed by the root [`RUNBOOK.md`](RUNBOOK.md):
 
 ## Open tasks
 
-Outstanding host work is tracked in [`TODO.md`](TODO.md). The kernel 7.x / GCN4 question that
-dominated it was **largely answered on 2026-08-02**: a 35-minute instrumented GPU soak found zero
-faults on kernel 7.1.5, and Polaris/GCN4 is confirmed still fully supported rather than moved to
-legacy. What remains open there is the literature search and one untested subsystem — hardware
-video decode, which is unavailable on this host for packaging reasons unrelated to the card.
+Outstanding host work is tracked in [`TODO.md`](TODO.md). Three things are open there:
+
+- **Kernel 7.x / GCN4 GPU** — **effectively answered.** A 35-minute gfx soak (2026-08-02) and a
+  15-minute UVD/VCE soak (2026-08-03) both found zero faults on kernel 7.1.5, and Polaris/GCN4 is
+  confirmed still fully supported rather than moved to legacy. Hardware video decode was restored
+  by installing `mesa-va-drivers-freeworld` — a stock-Fedora packaging gap, not a card-age
+  problem. Only the literature search remains, and it would now only confirm what this host has
+  already measured.
+- **Three failed systemd units** surfaced by the F43 QA pass — a PCM ingest merge conflict, a
+  `TypeError` in the YouTrack exporter, and `recollindex-overnight` timing out at a 39.4 GB memory
+  peak. All three were diagnosed as unrelated to the upgrade.
+
+Findings that turn out **not** to be upgrade damage — misconfigured or silently failing host jobs
+noticed along the way — are raised in [`~/admin/TODO.md`](file:///home/kinscoe/admin/TODO.md) for
+the host-administration agent to investigate, not tracked here. This repo stays scoped to the
+planning and QA of the Fedora upgrade itself.
+
 Container-level work (the Glean decommission) moved to `/opt/containers/TODO.md` on 2026-08-01
 (Glean is now stopped and disabled, with its data retained pending a decision on the stored
 articles).

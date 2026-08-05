@@ -1040,8 +1040,14 @@ systemctl is-enabled kasm.service   # expect: disabled
 ls /opt/kasm                        # expect: still installed, 1.18.1
 ```
 
-- [ ] Kasm still down and disabled — matches baseline, no action needed
-- [ ] `/opt/kasm` intact (the snapshot from Phase 2.4 is the safety net)
+- [x] Kasm still down and disabled — matches baseline, no action needed — **2026-08-05**. All 8
+      containers `Exited`, none restarting: `kasm_proxy` (137), `kasm_api` (137), `kasm_agent` (1),
+      `kasm_manager` (1), `kasm_db` (0) exited 9 days ago; `kasm_rdp_https_gateway` (1),
+      `kasm_rdp_gateway` (1), `kasm_guac` (140) 11 days ago. Every exit predates the 2026-08-01
+      upgrade, so the upgrade neither started nor stopped anything here.
+      `kasm.service` is `disabled` and `inactive`.
+- [x] `/opt/kasm` intact (the snapshot from Phase 2.4 is the safety net) — **2026-08-05**.
+      Present, still 1.18.1 (`/opt/kasm/1.18.1`, `bin`, `current`, `RUNBOOK.md`).
 
 Only if Kasm is being restored:
 - [ ] All 8 Kasm containers `Up`, `kasm.service` active
@@ -1057,9 +1063,19 @@ snap refresh --list 2>/dev/null || echo "up to date"
 systemctl status snapd --no-pager
 ```
 
-- [ ] All previously installed snaps listed: bare, core, core20, core22, core24, ffmpeg-2404,
+- [x] All previously installed snaps listed: bare, core, core20, core22, core24, ffmpeg-2404,
       gnome-42-2204, gnome-46-2404, gtk-common-themes, mesa-2404, obs-studio, shortwave, snapd
-- [ ] snapd running without errors
+      — **PASSED 2026-08-05**. All 13 present, none missing, none broken or disabled.
+      `snap refresh --list` reports **All snaps up to date**, and `snap changes` shows no
+      pending or failed change — so nothing stalled mid-refresh across the upgrade.
+- [x] snapd running without errors — **PASSED 2026-08-05**. `snapd.service` active since the
+      2026-08-02 boot, `snapd.socket` active, `snapd.seeded.service` inactive/dead with
+      `Result=success` (correct — it is a boot-time oneshot, not a long-running unit).
+      snapd is **2.76.1**, the F43 build; no snap unit appears in `systemctl --failed`.
+
+  > Worth recording: `snapd.socket` was one of the units that **failed on 2026-08-01** during the
+  > broken-policy window and was recovered by hand. It has come up cleanly on its own across the
+  > two reboots since, which is what closes it out rather than the recovery itself.
 
 **[HUMAN]**
 - [ ] Launch one snap app (e.g. shortwave) to confirm it opens
@@ -1215,9 +1231,21 @@ numbering does not shift.
 rpm -qa | grep -i '^salt' || echo 'salt absent — expected'
 ```
 
-- [ ] Confirms absent — no further action
+- [x] Confirms absent — no further action — **2026-08-05**. `rpm -qa | grep -i '^salt'` returns
+      nothing. Salt did not come back through the upgrade or through any dependency.
 
 ### QA Sign-off
+
+> **Status 2026-08-05: every `[AI]` check in QA-1 through QA-13 has passed.** Three items remain
+> and all three are `[HUMAN]` — they are the only thing standing between here and sign-off:
+>
+> | Item | What it needs |
+> |---|---|
+> | QA-5 spot-checks | Open Gitea, Woodpecker and the OpenBao UI in a browser and confirm they *render*, not just return 200 |
+> | QA-11 snap launch | Launch one snap app (e.g. `shortwave`) and confirm it opens |
+> | QA-10 Kasm session | **Not required.** Only applies if Kasm is deliberately restored, which Phase 6 has not decided. The `[AI]` half is done and Kasm is confirmed still down by design. |
+>
+> So the real gate is two browser checks and one app launch.
 
 - [ ] All QA-1 through QA-13 checks passed (or failures documented with workarounds applied)
       — note QA-10 (Kasm) and QA-13 (Salt) are both no-ops by design
