@@ -1117,7 +1117,57 @@ systemctl status snapd --no-pager
   > two reboots since, which is what closes it out rather than the recovery itself.
 
 **[HUMAN]**
-- [ ] Launch one snap app (e.g. shortwave) to confirm it opens
+- [x] Launch one snap app (e.g. shortwave) to confirm it opens — **PASSED 2026-08-05.** Kevin ran
+      `snap run shortwave`; it opens and works. Two warnings printed on launch — diagnosed below
+      as **pre-existing and harmless**, not upgrade damage.
+
+#### The `libpxbackend-1.0.so` warning on snap launch — diagnosed 2026-08-05, NOT upgrade damage
+
+Launching `shortwave` prints:
+
+```
+libpxbackend-1.0.so: cannot open shared object file: No such file or directory
+Failed to load module: /home/kinscoe/snap/shortwave/common/.cache/gio-modules/libgiolibproxy.so
+```
+
+**What it is.** GLib's libproxy-backed proxy resolver (`libgiolibproxy.so`) `dlopen()`s
+`libpxbackend-1.0.so`. The GNOME runtime snap **does** ship that file, at
+`usr/lib/x86_64-linux-gnu/libproxy/libpxbackend-1.0.so` — but that `libproxy/` subdirectory is
+**not on the runtime's linker search path**: the only entry in its `ld.so.conf.d` is
+`/usr/local/lib`. So the `dlopen` by bare soname fails and GLib skips the module. This is an
+upstream packaging wart in the GNOME content snap, not a fault on this host.
+
+**Why it is not upgrade damage — three independent lines of evidence:**
+
+1. **The pre-upgrade runtime has the identical layout.** `gnome-46-2404` revision **153**,
+   installed **2026-02-02** — six months before the upgrade — ships `libpxbackend-1.0.so` in the
+   same non-searchable `libproxy/` subdirectory as the current revision 164. The same warning
+   would have printed on F42.
+2. **No snap changed across the upgrade.** Newest snap file on disk is `gnome-46-2404` at
+   **2026-07-02**, a month before the 2026-08-01 upgrade; `shortwave` itself dates to 2025-09-17.
+   `snap changes` reports nothing pending or recent.
+3. **The host's libproxy is never consulted.** Snaps bundle their own runtime. This host has
+   `libproxy-0.5.12-1.fc43` with a perfectly good `/usr/lib64/libproxy/libpxbackend-1.0.so`, but
+   the sandbox cannot and does not use it. A host-side Fedora upgrade cannot reach inside.
+
+**Functional impact: none, and this is verifiable rather than assumed.** The `giomodule.cache`
+GLib wrote during Kevin's launch shows the other modules registering successfully:
+
+```
+libdconfsettings.so: gsettings-backend
+libgiognomeproxy.so: gio-proxy-resolver
+libgiognutls.so: gio-tls-backend
+```
+
+`libgiognomeproxy.so` **did** register as the `gio-proxy-resolver`, so proxy resolution still
+works through GNOME settings — libproxy was only ever the second of two paths to the same
+capability. `libgiognutls.so` registered as the TLS backend, which is the one that actually
+matters for a streaming radio app talking HTTPS. `libgiolibproxy.so` is simply absent from the
+cache, consistent with it having failed to load.
+
+**No action raised.** There is no task here: no impact on this host, and the fix belongs to the
+snap publisher's runtime packaging, not to the FLDW. Recorded here so a future upgrade does not
+re-investigate it.
 
 ### QA-12 — AMD GPU Stability
 
@@ -1275,24 +1325,62 @@ rpm -qa | grep -i '^salt' || echo 'salt absent — expected'
 
 ### QA Sign-off
 
-> **Status 2026-08-05: QA-1 through QA-13 all pass, with one item outstanding.**
->
-> | Item | State |
-> |---|---|
-> | QA-1 … QA-9, QA-12, QA-13 | **PASSED** |
-> | QA-5 `[HUMAN]` spot-checks | **PASSED 2026-08-05** — Kevin confirmed Gitea, Woodpecker and the OpenBao UI all render |
-> | QA-10 Kasm session | **Not required.** Only applies if Kasm is deliberately restored, which Phase 6 has not decided. The `[AI]` half is done and Kasm is confirmed still down by design. |
-> | QA-11 snap launch | **OUTSTANDING** — launch one snap app (e.g. `shortwave`) and confirm it opens |
->
-> **One app launch is the only thing left before sign-off can be filled in.**
+> **QA COMPLETE — 2026-08-05 07:19.** Every check QA-1 through QA-13 has passed. QA-10 (Kasm)
+> and QA-13 (Salt) were no-ops by design and are recorded as such.
 
-- [ ] All QA-1 through QA-13 checks passed (or failures documented with workarounds applied)
+- [x] All QA-1 through QA-13 checks passed (or failures documented with workarounds applied)
       — note QA-10 (Kasm) and QA-13 (Salt) are both no-ops by design
-- [ ] Date/time of completed QA: _______________
-- [ ] Kernel version running: _______________
-- [ ] Container count (expect 67; baseline 73 less Glean's six): _______________
-- [ ] Salt absent (removed pre-upgrade): _______________
-- [ ] Any open issues: _______________
+- [x] Date/time of completed QA: **2026-08-05 07:19 EDT** (upgrade performed 2026-08-01)
+- [x] Kernel version running: **`7.1.5-101.fc43.x86_64`**, SELinux **enforcing** (targeted)
+- [x] Container count (expect 67; baseline 73 less Glean's six): **67** — exactly as predicted.
+      **0 restarting, 0 unhealthy.**
+- [x] Salt absent (removed pre-upgrade): **confirmed** — `rpm -qa | grep -i '^salt'` returns
+      nothing
+- [x] Rollback path intact: all three F42 kernels (`6.19.8`, `6.19.13`, `6.19.14-108`) still
+      installed and **bootable via `grubby`**, alongside the rescue entry. Default boot is
+      `7.1.5-101.fc43`. `installonly_limit=5`.
+- [x] Any open issues: **four, none of them upgrade damage.** Listed below.
+
+#### Open issues at sign-off — none are upgrade damage
+
+1. **Four failed units.** `dnsmasq.service` (pre-existing, predates the upgrade);
+   `check-changelog-roll.service` and `check-pcm-nightly-ingest.service` — both are **monitors
+   working correctly**, the PCM one flagging the git merge conflict already tracked in `TODO.md`;
+   and one `drkonqi-coredump-processor@` instance, a transient KDE crash-handler unit.
+2. **Ten non-kernel `fc42` packages remain.** See the correction below — this checklist
+   previously recorded seven, and mischaracterised them.
+3. **The QA-11 snap `libproxy` warning** — diagnosed above as an upstream snap-runtime packaging
+   wart with no functional impact.
+4. **20 container stacks still have no systemd unit** and will not restart themselves after a
+   reboot. Tracked in Post-Upgrade Notes below.
+
+#### Correction — the `fc42` straggler count and characterisation
+
+This checklist and `CHECKPOINT.md` both recorded **seven** non-kernel `fc42` stragglers and
+described them as *"third-party repos that have not built for F43 yet."* Re-counted at sign-off,
+**both halves of that were wrong**:
+
+**There are ten, not seven.** The three that were missed are `hfsutils`, `pakchois` and
+`vamp-plugin-sdk` — all leaf libraries, which is presumably why they were overlooked.
+
+**Only two are third-party.** Querying `%{VENDOR}` shows eight of the ten are **Fedora Project**
+packages:
+
+| Package | Vendor |
+|---|---|
+| `ghostty-1.1.3` | Fedora Copr — user pgdev |
+| `claude-desktop-unofficial-1.24012.9` | *(none)* |
+| `hfsutils-3.2.6`, `javascriptcoregtk4.0-2.47.2`, `pakchois-0.4`, `peek-1.5.1`, `vamp-plugin-sdk-2.10`, `webkit2gtk4.0-2.47.2`, `xl2tpd-1.3.17`, `zfs-fuse-0.7.2.2` | **Fedora Project** |
+
+That changes what they mean. A Fedora Project package still at `.fc42` has not "failed to
+rebuild" — it means F43 shipped no rebuild, which usually indicates the package was **retired or
+orphaned** for F43, or carried forward untouched. `webkit2gtk4.0` / `javascriptcoregtk4.0` are the
+legacy GTK3 WebKit stack being phased out, and `peek` is dead upstream. These will never update in
+place; the question for each is whether it is still wanted, not when its build lands.
+
+**18 kernel `fc42` packages** remain (this file previously said 21) — that is the deliberate
+rollback set and `installonly_limit=5` governs it. **Now safe to prune**: QA-12 closed on
+2026-08-03 proved kernel 7.1.5 on this hardware across both the gfx and video rings.
 
 ---
 
