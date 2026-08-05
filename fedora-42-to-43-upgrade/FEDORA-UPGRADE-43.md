@@ -1390,7 +1390,12 @@ rollback set and `installonly_limit=5` governs it. **Now safe to prune**: QA-12 
 - [x] Create RUNBOOK.md files for the 7 containers that were missing them — DONE 2026-04-26 (actualbudget, excalidraw, karakeep, n8n, pastebooks, wikijs, youtrack)
 - [x] Add Fedora 43 upgrade notes to existing RUNBOOK.md files — DONE 2026-04-26 (convertx, filestash, garage, gitea, glean, home_file_server, kroki, openbao, rsshub, woodpecker-ci)
 - [ ] Run `sudo dnf distro-sync` to realign any 3rd-party packages to F43 equivalents
-- [ ] **Decide Kasm's fate** (Phase 6) — it has been down and disabled since before the upgrade
+- [ ] **Decide Kasm's fate** (Phase 6) — it has been down and disabled since before the upgrade.
+      **Deliberately parked by Kevin 2026-08-05** — he will get to it when he can. This is a
+      standing decision, not a forgotten item: Kasm stays down and disabled, `/opt/kasm` stays
+      intact at 1.18.1, and the Phase 2.4 snapshot at `/home/backups/kasm-snapshot-20260801`
+      (3.4 GB) remains the safety net. QA-10's `[AI]` half confirmed all of that on 2026-08-05,
+      and QA-10 did not block sign-off.
 - [x] **Salt** — removed from the host on 2026-08-01 rather than carried across the upgrade
 - [ ] **Plan the 43 → 44 upgrade.** F44 is already released, so F43 is N-1 with a limited support
       window — and F44 carries the newer Salt. Do not repeat the F42 situation of sitting on an EOL
@@ -1399,7 +1404,15 @@ rollback set and `installonly_limit=5` governs it. **Now safe to prune**: QA-12 
       manual-start only (they did not survive this reboot without hand-holding)
 - [ ] Resume the Glean decommission — now tracked in `/opt/containers/TODO.md`. It is stopped and
       disabled with all data intact; the open question is whether the stored articles need keeping.
-- [ ] **Bump Fedora version references from 42 → 43** now that the FLDW is actually on F43. This was deliberately deferred during the 2026-07-22 `fedora/` → `FLDW/` rename because the host was still on F42; on 2026-07-22 all three source-of-truth files were aligned to F42 so they match the live host until the upgrade actually happens. Change "Fedora Linux 42" → "Fedora Linux 43" in each:
-  - `~/ai/me.md` — *Systems and Environments* section.
-  - `~/ai/directives/kevins-federated-unix-universe.md` — the `FLDW` row in the Home table and the `FLDW` *Host-specific parameters* Description (two spots).
-  - Service catalog `~/Projects/private/fedora-dashboard/kevins-federated-unix-universe-services.md` — the `kevin.network.kevininscoe.com` FLDW fleet-host row (commit + push the `fedora-dashboard` repo per its own rule).
+- [x] **Bump Fedora version references from 42 → 43** — **DONE 2026-08-05.** This was deliberately deferred during the 2026-07-22 `fedora/` → `FLDW/` rename because the host was still on F42; all three source-of-truth files were aligned to F42 then so they matched the live host until the upgrade actually happened. All four spots now read "Fedora Linux 43":
+  - [x] `~/ai/me.md` — *Systems and Environments* section. **Edited; uncommitted** — see the note below.
+  - [x] `~/ai/directives/kevins-federated-unix-universe.md` — the `FLDW` row in the Home table and the `FLDW` *Host-specific parameters* Description (two spots). **Edited; uncommitted** — see the note below.
+  - [x] Service catalog `~/Projects/private/fedora-dashboard/kevins-federated-unix-universe-services.md` — the `kevin.network.kevininscoe.com` FLDW fleet-host row. **Committed and pushed, `e8346c3`**, per that repo's own rule.
+
+  > **The two `~/ai` edits are written but NOT committed**, deliberately. At the time of the
+  > change, `~/ai` held **three** sessions' uncommitted work tangled across the same two files:
+  > this F42 → F43 bump, another agent's `john` host-registry addition (plus its matching FLDW
+  > change log entry), and a third party's rewrite of the 2026-08-05 certbot entry. Staging
+  > `fedora/CHANGELOG.md` or `kevins-federated-unix-universe.md` by path would sweep all of it
+  > into one commit. That other agent was itself blocked asking Kevin the same question. Kevin
+  > decides how `~/ai` gets committed.
