@@ -2,16 +2,33 @@
 
 Human-owned task list for this host. Delete this file once every item is checked off.
 
-## FIRST — restore `setroubleshootd` (a safety net is currently switched off)
+## ~~FIRST — restore `setroubleshootd`~~ — DONE 2026-08-04 21:46
 
-**Raised:** 2026-08-03. **Priority: do this before anything else in this file.**
+**Raised:** 2026-08-03. **Closed:** 2026-08-04 21:46.
 
-- [ ] **Unmask and restart `setroubleshootd`.**
+- [x] **Unmask and restart `setroubleshootd`.** — **Done 2026-08-04 21:46.**
       ```bash
       sudo systemctl unmask setroubleshootd
       sudo systemctl start setroubleshootd
-      systemctl is-active setroubleshootd    # expect: active
+      systemctl is-active setroubleshootd    # → active
       ```
+      The mask symlink `→ /dev/null` is gone and the unit resolves to
+      `/usr/lib/systemd/system/setroubleshootd.service` again. It reports `static`, which is
+      correct — Fedora ships it D-Bus activated, not enabled at boot — and the activation path
+      through `org.fedoraproject.Setroubleshootd.service` works again, which the mask had also
+      defeated. `sealert -a /var/log/audit/audit.log` produces analysis, and the daemon
+      deactivated cleanly after 12 s as a transient D-Bus service should.
+
+      **The flood risk was checked first, since that is why it was masked.** There are 84 AVC
+      denials today, but only **2 distinct signatures** — `systemd_kdump_dep_generator_t` and
+      `systemd_anaconda_generator_t`, both `sys_admin` capability denials — and they fire only
+      in bursts on `systemctl daemon-reload`, not continuously. `setroubleshoot` groups by
+      signature, and on start it collapsed **35 denials into a single alert**. No flood.
+
+      Those generator denials are an unresolved F43 issue in their own right — the same two
+      types F43 renamed. They are now visible again, which is the point of restoring this.
+
+      Logged in `~/ai/fedora/CHANGELOG.md`, commit `d944af0`.
 
 **Why it is off.** A failed attempt to convert `~/bin/backup.sh` from cron to systemd on
 2026-08-03 put `rsync` into the confined `rsync_t` SELinux domain, generating ~3,700 AVC denials
