@@ -187,6 +187,43 @@ reader does not mistake them for F43 fallout. Full context in QA-1 of
 
 ---
 
+## Capture `rpm -qa` in the F44 pre-upgrade baseline — the one gap worth closing
+
+**Raised:** 2026-08-05, at the Fedora 42 → 43 QA sign-off.
+
+Kevin's note, to be acted on whenever the F44 planning is next picked up:
+
+> The single most reusable finding from this upgrade is still the baseline gap — the F43
+> pre-upgrade baseline captured services, containers, ports, timers and snaps but never
+> `rpm -qa`, which is why "was this installed before?" couldn't be answered about the
+> stragglers. One `rpm -qa` capture in the F44 baseline turns that into a one-command diff.
+
+### Why it mattered in practice
+
+The F43 baseline was thorough about *running state* and silent about *installed packages*. So
+when ten packages turned up still on `.fc42` after the upgrade, there was no way to answer the
+only question that mattered — were these already there before, or did the upgrade strand them?
+It had to be reconstructed from vendor fields and repo guesses instead of read off a diff.
+
+### What to do
+
+- [ ] Add `rpm -qa` to the F44 pre-upgrade baseline capture, alongside the service, container,
+      port, timer and snap inventories that are already there.
+- [ ] Keep it as `*.local.txt` so it stays gitignored — a full package-and-version manifest of an
+      internet-reachable host is the strongest reconnaissance artifact in this repo. The two F44
+      manifests captured 2026-08-02 already follow this pattern and are deliberately untracked.
+- [ ] After the upgrade, diff the two captures to answer straggler questions in one command
+      rather than by inference.
+
+Note that the F44 baseline is **already half-built**: the two manifests captured 2026-08-02
+(`installed-packages-before-fedora-44-2026-08-02.local.txt`, full NEVRA, 8,480 lines, and
+`installed-package-names-before-fedora-44-2026-08-02.local.txt`, names only, 8,236) live in
+`fedora-43-to-44-upgrade/`. So for F44 this gap is closed *provided the rest of the baseline is
+captured to match* — the task is to make sure `rpm -qa` is a standing part of the baseline
+procedure, not a one-off that happened to get done this time.
+
+---
+
 > **Glean's decommission moved out of this file on 2026-08-01.** It now lives in
 > `/opt/containers/TODO.md`, with the containers repo that manages it. Glean was stopped and
 > disabled before the F43 upgrade; its data is intact, and the open question is whether the stored
