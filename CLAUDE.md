@@ -14,6 +14,21 @@ A personal knowledge base of notes, observations, and fixes for a Fedora Linux K
 - Checklist items use `- [ ]` / `- [x]` GitHub-flavored Markdown task lists. Mark items `[x]` with the resolution date and a short description inline when they are completed.
 - `resume.sh` is gitignored — it holds a `claude --resume <session-id>` command for the owner's convenience and should never be committed.
 
+## Scope — what belongs here and what does not
+
+This repo is about **the planning and QA of Fedora upgrades themselves**. Keep it to that.
+
+Post-upgrade QA routinely turns up host problems that have nothing to do with the upgrade — a misconfigured job, a cron entry failing silently, a service nobody is monitoring. Those findings are **raised in `~/admin/TODO.md`** (the `fedora-admin` repo) for the host-administration agent and Kevin to investigate. Kevin is the gate on any action taken about them. Do not open a tracking section for them here.
+
+The distinction is cause, not subject matter:
+
+| Finding | Goes to |
+|---|---|
+| Caused by, or a regression from, the upgrade | this repo — the relevant `QA-*` section, and `TODO.md` if it stays open |
+| Pre-existing, or unrelated to the upgrade, merely *found* during QA | `~/admin/TODO.md` |
+
+When a QA check surfaces something that turns out to be pre-existing, still record in the QA section that it was found and that it was diagnosed as not upgrade damage — then carry the actual task to `~/admin/TODO.md` rather than tracking it in both places. Note also that this repo is **public**: see `.gitignore` for the `*.local.md` / `*.local.txt` convention that keeps host-detail and reconnaissance material unpublished.
+
 ## System context (relevant when drafting commands or configs)
 
 - **OS:** Fedora 42 → 43, SELinux enforcing (targeted policy)
