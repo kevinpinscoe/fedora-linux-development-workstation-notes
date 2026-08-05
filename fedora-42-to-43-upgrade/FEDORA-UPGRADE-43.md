@@ -893,6 +893,38 @@ done
 - [ ] Woodpecker CI: `https://woodpecker-ci.kevininscoe.com` — can see pipelines
 - [ ] OpenBao: `https://openbao.kevininscoe.com/ui` — can log in and read secrets
 
+#### AI pre-verification of the three UIs — 2026-08-05
+
+The human check above is about *rendering*, and the failure mode it exists to catch is a **blank
+page behind an HTTP 200**: the document loads but its JavaScript or CSS bundle 404s, so the app
+never boots. That part is testable without a browser, and it was tested — **all three pass.** What
+is left for a human is genuinely only what needs eyes and a login.
+
+Every asset each page references was fetched individually. **18 of 18 returned 200 with the
+correct MIME type**, and each app shell carries the markers its framework needs to boot:
+
+| Service | Document | Assets | Shell markers |
+|---|---|---|---|
+| Gitea | 200, 13.7 KB, `<title>My private git repos</title>` | 3/3 — `index.css` 322 KB, `theme-gitea-auto.css` 21 KB, `index.js` 273 KB | `id="navbar"` rendered, `/user/login?redirect_to=%2f` and `/explore/repos` links present — the correct **unauthenticated** state, not an error page |
+| Woodpecker | 200, 857 B, `<title>Woodpecker</title>` | 5/5 — `index-BjKYnmqw.js` 483 KB, `index-DYOv0lf6.css` 45 KB | `<div id="app">` mount point present; `/web-config.js` serves a real bootstrap — **v3.7.0**, `WOODPECKER_USER = null` (correct, unauthenticated), and `WOODPECKER_USER_REGISTERED_AGENTS = true`, which independently corroborates the agent-registration check above |
+| OpenBao | 200, 1.0 MB, `<title>OpenBao</title>` | 8/8 — `vendor.js` 2.6 MB, `vault.js` 1.6 MB, `vault.css` 359 KB all intact | Ember boot meta `name="vault/config/environment"` and `id="ember-basic-dropdown-wormhole"` both present |
+
+Two Woodpecker assets — `/assets/custom.css` and `/assets/custom.js` — return **200 with 0 bytes**.
+That is correct: they are Woodpecker's optional user-customization hooks, and
+`/opt/containers/woodpecker-ci/docker-compose.yml` mounts **no** file over either, so they are the
+upstream empty placeholders rather than a mount that broke. A 404 there would have been the
+finding; an empty file is not.
+
+**TLS is healthy on all three** — one certificate, `CN=kevin.kevininscoe.com`, valid to
+**2026-10-22**, verifying cleanly (`ssl_verify_result=0`) on every request. Served by
+Apache/2.4.68 with OpenSSL 3.5.7, both current F43 builds.
+
+*Method note for a future upgrade:* fetch the page, extract every `src=`/`href=` ending in `.js`
+or `.css`, and request each one. `curl` against the page alone cannot distinguish a working app
+from a white screen — the assets are where an upgrade actually breaks a UI. The
+`woodpecker-server` and `garage` images are **distroless**, so `docker exec … ls` fails on them;
+verify their files over HTTP instead.
+
 ### QA-6 — OpenBao Unsealed
 
 **[AI]**
