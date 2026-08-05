@@ -889,9 +889,16 @@ done
       an unhealthy healthcheck.**
 
 **[HUMAN]** — spot-check a few UIs in browser to confirm they render correctly (not just HTTP 200):
-- [ ] Gitea: `https://git.kevininscoe.com` — login works, repos visible
-- [ ] Woodpecker CI: `https://woodpecker-ci.kevininscoe.com` — can see pipelines
-- [ ] OpenBao: `https://openbao.kevininscoe.com/ui` — can log in and read secrets
+- [x] Gitea: `https://git.kevininscoe.com` — login works, repos visible — **Kevin confirmed
+      2026-08-05: renders fine**
+- [x] Woodpecker CI: `https://woodpecker-ci.kevininscoe.com` — can see pipelines — **Kevin
+      confirmed 2026-08-05: renders fine**
+- [x] OpenBao: `https://openbao.kevininscoe.com/ui` — can log in and read secrets — **Kevin
+      confirmed 2026-08-05: renders fine**
+
+**QA-5 is CLOSED, 2026-08-05.** Both halves pass: the `[AI]` sweep on 2026-08-03 (41 published
+ports, every service accounted for) and the `[HUMAN]` render check today, backed by the asset-level
+pre-verification below.
 
 #### AI pre-verification of the three UIs — 2026-08-05
 
@@ -1268,16 +1275,16 @@ rpm -qa | grep -i '^salt' || echo 'salt absent — expected'
 
 ### QA Sign-off
 
-> **Status 2026-08-05: every `[AI]` check in QA-1 through QA-13 has passed.** Three items remain
-> and all three are `[HUMAN]` — they are the only thing standing between here and sign-off:
+> **Status 2026-08-05: QA-1 through QA-13 all pass, with one item outstanding.**
 >
-> | Item | What it needs |
+> | Item | State |
 > |---|---|
-> | QA-5 spot-checks | Open Gitea, Woodpecker and the OpenBao UI in a browser and confirm they *render*, not just return 200 |
-> | QA-11 snap launch | Launch one snap app (e.g. `shortwave`) and confirm it opens |
+> | QA-1 … QA-9, QA-12, QA-13 | **PASSED** |
+> | QA-5 `[HUMAN]` spot-checks | **PASSED 2026-08-05** — Kevin confirmed Gitea, Woodpecker and the OpenBao UI all render |
 > | QA-10 Kasm session | **Not required.** Only applies if Kasm is deliberately restored, which Phase 6 has not decided. The `[AI]` half is done and Kasm is confirmed still down by design. |
+> | QA-11 snap launch | **OUTSTANDING** — launch one snap app (e.g. `shortwave`) and confirm it opens |
 >
-> So the real gate is two browser checks and one app launch.
+> **One app launch is the only thing left before sign-off can be filled in.**
 
 - [ ] All QA-1 through QA-13 checks passed (or failures documented with workarounds applied)
       — note QA-10 (Kasm) and QA-13 (Salt) are both no-ops by design
