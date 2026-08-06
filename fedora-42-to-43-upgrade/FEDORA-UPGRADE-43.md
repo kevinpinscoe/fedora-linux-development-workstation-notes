@@ -969,7 +969,7 @@ sudo docker logs youtrack --tail 30 2>&1 | grep -E "ready|migration|error"
 - [x] No ERROR lines in last 30 log entries — none present.
 
 Separately: `youtrack-export.service` (the daily exporter, a different unit) **is** failing, on an
-application bug unrelated to the upgrade. See QA-1 and `TODO.md`.
+application bug unrelated to the upgrade. See QA-1.
 
 ### QA-8 — Backup Scripts Still Executable
 
@@ -1345,7 +1345,7 @@ rpm -qa | grep -i '^salt' || echo 'salt absent — expected'
 
 1. **Four failed units.** `dnsmasq.service` (pre-existing, predates the upgrade);
    `check-changelog-roll.service` and `check-pcm-nightly-ingest.service` — both are **monitors
-   working correctly**, the PCM one flagging the git merge conflict already tracked in `TODO.md`;
+   working correctly**, the PCM one flagging a pre-existing git merge conflict;
    and one `drkonqi-coredump-processor@` instance, a transient KDE crash-handler unit.
 2. **Ten non-kernel `fc42` packages remain.** See the correction below — this checklist
    previously recorded seven, and mischaracterised them.

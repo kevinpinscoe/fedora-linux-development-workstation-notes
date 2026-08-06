@@ -17,16 +17,14 @@ Personal notes, observations, and fixes for a **Fedora Linux** developer worksta
 ## Repository layout
 
 ```
-fedora-linux-development-workstation-notes/
-├── CLAUDE.md                 # Repo conventions + system context (for coding assistants)
+fedora-notes/
+├── CLAUDE.md                 # Repo conventions + provenance (for coding assistants)
 ├── README.md                  # Repo index (this file)
 ├── RUNBOOK.md                 # Root runbook index → points to subdirectory runbooks
-├── TODO.md                    # Open tasks from this upgrade (GPU research, failed units)
 ├── SELINUX_SETUP.md           # SELinux + container labeling notes and fixes
 ├── fedora-42-to-43-upgrade/   # In-place upgrade notes (Fedora 42 → 43)
 │   ├── FEDORA-UPGRADE-43.md              # Full upgrade checklist (pre-upgrade → QA sign-off)
 │   ├── PRE-UPGRADE-BASELINE-2026-07-31.md  # Host state captured the night before the upgrade
-│   ├── notes-container-inventory.md      # Inventory of the 44 Docker Compose stacks
 │   ├── notes-fedora43-upgrade-planning.md  # Research notes and key findings
 │   └── notes-system-profile.md           # Hardware, disk layout, and key services
 ├── fedora-43-to-44-upgrade/   # In-place upgrade notes (Fedora 43 → 44) — planning only
@@ -49,7 +47,6 @@ Notes and a step-by-step checklist for the in-place upgrade from Fedora 42 to Fe
 | `FEDORA-UPGRADE-43.md` | Full upgrade checklist: pre-upgrade prep, backups, the upgrade itself, post-upgrade verification (OS, Docker, containers, SELinux, Snap, AMD GPU), and a QA sign-off matrix |
 | `notes-fedora43-upgrade-planning.md` | Research notes and key findings from planning the upgrade: breaking changes in F43 (DNF 5, RPM 6, glibc 2.42), Docker/container concerns, and known upgrade failure patterns |
 | `notes-system-profile.md` | Hardware inventory, disk layout, and key services on the host |
-| `notes-container-inventory.md` | Inventory of the 44 Docker Compose stacks in `/opt/containers`, including which have systemd units, backup timers, and RUNBOOK status |
 | `PRE-UPGRADE-BASELINE-2026-07-31.md` | Snapshot of the host taken the night before the F43 upgrade — package versions, pre-existing failed units, container fleet, backup timers, third-party repo readiness. Compare against it during QA so pre-existing faults are not read as upgrade damage. Port and SELinux-confinement detail is held back in an untracked `.local.md` companion, since this repo is public. |
 
 ### `fedora-43-to-44-upgrade/`
@@ -82,31 +79,10 @@ Operational runbooks are indexed by the root [`RUNBOOK.md`](RUNBOOK.md):
 | [`kde/RUNBOOK.md`](kde/RUNBOOK.md) | KDE Plasma desktop — Plasma/KWin recovery, global shortcuts (incl. the `Meta+N` Obsidian quick-capture into the `~/notes` vault), KRunner, and session plumbing |
 | [`garage/RUNBOOK.md`](garage/RUNBOOK.md) | Garage S3-compatible object storage backend |
 
-## Open tasks
-
-Outstanding host work is tracked in [`TODO.md`](TODO.md). Three things are open there:
-
-- **Kernel 7.x / GCN4 GPU** — **effectively answered.** A 35-minute gfx soak (2026-08-02) and a
-  15-minute UVD/VCE soak (2026-08-03) both found zero faults on kernel 7.1.5, and Polaris/GCN4 is
-  confirmed still fully supported rather than moved to legacy. Hardware video decode was restored
-  by installing `mesa-va-drivers-freeworld` — a stock-Fedora packaging gap, not a card-age
-  problem. Only the literature search remains, and it would now only confirm what this host has
-  already measured.
-- **Three failed systemd units** surfaced by the F43 QA pass — a PCM ingest merge conflict, a
-  `TypeError` in the YouTrack exporter, and `recollindex-overnight` timing out at a 39.4 GB memory
-  peak. All three were diagnosed as unrelated to the upgrade.
-
-Findings that turn out **not** to be upgrade damage — misconfigured or silently failing host jobs
-noticed along the way — are raised in [`~/admin/TODO.md`](file:///home/kinscoe/admin/TODO.md) for
-the host-administration agent to investigate, not tracked here. This repo stays scoped to the
-planning and QA of the Fedora upgrade itself.
-
-Container-level work (the Glean decommission) moved to `/opt/containers/TODO.md` on 2026-08-01
-(Glean is now stopped and disabled, with its data retained pending a decision on the stored
-articles).
-
 ## Key issues documented
 
+- **Kernel 7.1 on GCN4 / Polaris is fine** — the 6.19 → 7.1 jump in a single step was the largest unknown going into F43 on a 2016 Radeon PRO WX 7100, and no reports either way could be found beforehand. Two instrumented soaks settled it: 35 minutes on the gfx ring (2026-08-02) and 15 minutes driving the UVD and VCE video engines (2026-08-03), both finding **zero** faults, ring timeouts, GPU resets, or DRM errors. Polaris/GCN4 remains fully supported by `amdgpu` and Mesa, not moved to legacy. The card throttled on its 95 W power cap rather than thermally, which is correct behavior. The one real GCN4 limitation is **ROCm**, which dropped `gfx803` years ago — unrelated to graphics or video.
+- **Stock Fedora ships no H.264/HEVC VAAPI** — hardware video decode and encode appear broken on *any* GPU, current models included, because Fedora strips those codecs from `mesa-va-drivers` for patent reasons. The symptom is `ffmpeg ... h264_vaapi` failing with `No usable encoding profile found`. Installing `mesa-va-drivers-freeworld` from RPM Fusion took VAAPI profiles from **3 → 15** and restored both decode and encode. Install **both** arches — the `i686` build matters for Steam, Wine, and Bottles, which use the 32-bit graphics stack. This is a packaging gap, not a hardware or driver fault.
 - **Docker CE + kernel 6.17** — Kernel 6.17 (shipped with Fedora 43) removes legacy `ip_tables` modules that Docker v28.x requires. Upgrade Docker CE to v29.x *before* upgrading Fedora.
 - **AMD amdgpu page faults (kernels 6.17.9–6.18.3)** — Regression affecting some AMD GPU hardware; resolved by 6.18.4+ and 6.19.x. Mitigation: retain multiple kernel entries in GRUB.
 - **KDE Plasma duplicate packages** — Plasma 6.5.1 introduced duplicate package conflicts during upgrade; resolved via `dnf distro-sync --skip-broken` or `dnf downgrade krunner`.

@@ -36,7 +36,7 @@ sudo dnf --releasever=44 --repo=fedora --repo=updates --refresh \
 ### Why the kernel line matters most
 
 The single largest risk carried into F43 was the kernel going `6.19.14 → 7.1.x` in one step, on a
-2016 **Radeon PRO WX 7100 (GCN4 / Polaris)** — the concern written up in the repo root `TODO.md`.
+2016 **Radeon PRO WX 7100 (GCN4 / Polaris)**.
 
 **That risk does not repeat here.** F44's updates repo currently ships the *same upstream kernel*
 this host already runs, `7.1.5`, differing only in the Fedora build number (`-101.fc43` →
@@ -140,8 +140,9 @@ Inherited from the F43 upgrade, tracked in the repo root `CHECKPOINT.md`:
       the class most likely to be dropped if the repo has not built for the new release when the
       upgrade runs. Check it explicitly in the post-upgrade package diff.
 - [ ] **Finish the F43 post-upgrade QA pass** in `../fedora-42-to-43-upgrade/FEDORA-UPGRADE-43.md`.
-- [ ] **Close out the root `TODO.md`** kernel/GCN4 research and write the finding back into the
-      checklist, so this upgrade inherits an answer rather than the question.
+- [x] **Kernel/GCN4 research closed** and the finding written back into the F43 checklist, so
+      this upgrade inherits an answer rather than the question. See QA-12 there, and the
+      "Key issues documented" entry in the repo `README.md`.
 - [ ] **Clear the seven non-kernel `fc42` stragglers** — `ghostty`,
       `claude-desktop-unofficial`, `webkit2gtk4.0`, `javascriptcoregtk4.0`, `peek`, `xl2tpd`,
       `zfs-fuse`. Packages that failed to move F42 → F43 will not improve by adding another
