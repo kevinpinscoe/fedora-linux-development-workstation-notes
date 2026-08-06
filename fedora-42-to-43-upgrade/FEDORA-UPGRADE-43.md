@@ -700,27 +700,28 @@ systemctl --failed --no-pager                    # compare against the baseline 
 - [x] RPM 6.x confirmed — **`RPM version 6.0.2`** (baseline 4.20.1). DNF is `dnf5 5.2.18.0`, which
       as the checklist notes was already 5.x on F42 and is not a signal.
 - [x] SELinux Enforcing
-- [x] **Failed units — compared against the baseline; no upgrade damage found.** Seven units are
-      failed. Four are expected: `check-changelog-roll`, `dnsmasq`, `github-poll-for-activity`,
-      and one `drkonqi-coredump-processor@*` (down from ~10). `check-ai-skill-jobs` and
-      `gitea-backup` are **no longer failing** — an improvement on the baseline.
-      Three names are new, and **all three were individually diagnosed as unrelated to the
-      upgrade** — each failed on a scheduled run on 2026-08-03, two days after it:
-      - `check-pcm-nightly-ingest` — not a regression of the 2026-08-01 fix. This unit is a
-        *monitor*, and it is working correctly: the job it watches,
-        `pcm-nightly-ingest-commit.service` (a **user** unit), aborted on a git merge conflict in
-        the PCM vault needing human triage (`moc/docker-containers.md` and one `notes/` file).
-        Content conflict, not a host fault.
-      - `youtrack-export` — application bug in Kevin's own exporter:
-        `TypeError: 'int' object is not iterable` at `export.py:622` in `_names`. A YouTrack API
-        response shape the script does not handle. The script failed safe — retention was skipped,
-        so the previous export survives.
-      - `recollindex-overnight` — `Result=timeout`. Ran 01:00 → 05:03, consumed 30 min CPU and a
-        **39.4 GB memory peak**, then was SIGKILLed. A resource/duration problem in the indexer,
-        not a package or kernel fault.
+- [x] **Failed units — compared against the baseline; no upgrade damage found.** Seven units were
+      failed. Four were already failing *before* the upgrade, and two that had been failing were
+      now clean — an improvement, not a regression. This is precisely why the baseline exists.
 
-      None of the three belongs to this upgrade. They are tracked as separate host work, not as
-      QA-1 failures.
+      Three names were new, and **all three were individually diagnosed as unrelated to the
+      upgrade.** Each failed on a *scheduled* run two days afterward, which is the detail that
+      matters: a unit that fails days later on its own timer is far more likely to have hit its own
+      bug than to be upgrade fallout. They fell into three classes worth recognising:
+
+      - **A monitor correctly reporting someone else's problem.** The failing unit was a health
+        check, and the job it watched had aborted on a git merge conflict needing human triage. The
+        monitor was working exactly as designed. Read what a unit is *for* before treating its
+        failure as its own.
+      - **An application bug in a scheduled exporter** — a `TypeError` raised when an API returned
+        a scalar where the script expected a sequence. It **failed safe**: the retention step was
+        skipped, so the previous good export survived. Nothing to do with the OS.
+      - **A resource ceiling.** A filesystem indexer ran four hours, hit a **39.4 GB** memory peak,
+        and was SIGKILLed on its unit timeout (`Result=timeout`). A duration and memory problem in
+        the indexer, not a package or kernel fault.
+
+      The general point: **`systemctl --failed` after an upgrade is a list of suspects, not a list
+      of casualties.** Diagnose each to its own root cause before attributing any of it upward.
 
 ### QA-2 — Core System Services
 
@@ -779,20 +780,25 @@ docker ps --filter status=exited --format 'table {{.Names}}\t{{.Status}}'
 - [x] All expected containers show `Up` — **zero** restarting, **zero** unhealthy
 - [x] The 20 unit-less stacks were brought up by hand (Phase 5.1) — not needed in the end. They
       came up on their own at the 2026-08-01 reboot and are still up across the 2026-08-02 reboot.
-- [x] All `label:disable` stacks running — with two naming corrections to the baseline list:
-      - **`filestash` and `home_file_server` are the same stack, not two.** The compose file at
-        `/opt/containers/filestash/docker-compose.yml` declares
-        `container_name: home_file_server` on the `machines/filestash` image. Searching for a
-        container called `filestash` finds nothing and reads as a missing service. The baseline's
-        "11 stacks, not 4" is really **10 distinct stacks**.
-      - **`woodpecker-ci` runs as two containers**, `woodpecker-server` and `woodpecker-agent`,
-        both healthy. The baseline named the stack, not the containers.
-- [x] Expected exceptions, all by design — 17 containers are exited: the 8 `kasm_*`, plus 9
-      months-old scratch containers unrelated to the upgrade (`pastebooks-dev`,
-      `sourcehut-demo-nginx-1`, `docker-valkey-1`, and six auto-named leftovers, all last exited
-      4–9 months ago). Glean's six are **absent entirely** rather than exited — the containers
-      were removed, not just stopped. `youtrack` itself is up; no `youtrack.corrupt-20260729`
-      container exists to start by accident.
+- [x] All `label:disable` stacks running — but **two apparently missing services turned out to be
+      counting errors, not outages.** Both are easy traps when auditing a fleet against a list of
+      stack names:
+      - **A compose file's `container_name:` can differ from its stack directory name.** One stack
+        declared an unrelated `container_name`, so searching `docker ps` for the stack name
+        returned nothing and read as a service that had failed to start — while it was running the
+        whole time under its other name. Audit by compose project, or grep the compose files for
+        `container_name:` before believing an absence.
+      - **One stack can be several containers.** A CI stack ran as a server plus an agent, both
+        healthy. A baseline listing *stacks* will not line up with a `docker ps` listing
+        *containers*, and the mismatch reads as a missing service.
+- [x] Expected exceptions, all by design — 17 containers exited. Most were months-old scratch and
+      demo containers last run long before the upgrade; the remainder belonged to a suite that had
+      been stopped and disabled deliberately beforehand. **Check exit timestamps before
+      investigating an exited container** — anything last stopped months ago is not upgrade
+      fallout.
+      One decommissioned stack's containers were **absent entirely** rather than exited, having
+      been removed rather than stopped. Absence and exit mean different things, and only one of
+      them is a fault.
 
 ### QA-5 — Container Health Endpoints
 
@@ -818,87 +824,70 @@ above derives the list live rather than hardcoding it.
 Service-specific checks that a status code alone will not catch:
 
 ```bash
-# openbao — must show "sealed":false (SEALS ON EVERY RESTART)
-curl -s https://openbao.kevininscoe.com/v1/sys/health | python3 -m json.tool
+# A status code alone does not prove a service works. For each service that matters,
+# assert on something only a working instance can produce. Patterns worth reusing:
 
-# garage
-sudo docker exec garage garage status
+# 1. Secret stores / anything that seals or locks on restart — assert the unlocked field,
+#    not the HTTP code. A sealed instance still answers 200.
+curl -s https://<host>/v1/sys/health | python3 -m json.tool     # expect "sealed": false
 
-# gitea — API version, plus the SSH port
-curl -sf https://git.kevininscoe.com/api/v1/version && echo OK
-ssh -T -p 2223 git@git.kevininscoe.com 2>&1 | head -1
+# 2. APIs — assert the version payload, not reachability
+curl -sf https://<host>/api/v1/version && echo OK
 
-# rsshub — must return feed data, not just 200
-curl -sf https://rsshub.kevininscoe.com/healthz && echo OK
+# 3. Git forges — the SSH port is not HTTP; probe it as SSH
+ssh -T -p <ssh-port> git@<host> 2>&1 | head -1
 
-# woodpecker-ci — server health, then confirm the agent registered
-WP=$(docker port woodpecker-server 8000 | head -1)
-curl -sf "http://$WP/healthz" && echo OK
-sudo docker logs woodpecker-agent --tail 20 2>&1 | grep -i 'connect\|error'
+# 4. Renderers / converters — actually render something, and GENERATE the input rather than
+#    pasting a literal. A stale encoded string in a checklist rots into a false failure.
+ENC=$(python3 -c "import zlib,base64;print(base64.urlsafe_b64encode(zlib.compress(b'digraph G {Hello->World}',9)).decode())")
+curl -s -o /dev/null -w '%{http_code}\n' "http://$(docker port <container> <port> | head -1)/graphviz/svg/$ENC"
 
-# youtrack — expect 200 only after migration completes (60-90s)
-YT=$(docker port youtrack 8080 | head -1)
-curl -sf -o /dev/null -w "%{http_code}" "http://$YT"
+# 5. Agent/worker pairs — confirm the worker registered with the server, not just that both are Up
 
-# kroki — actually render something
-KR=$(docker port kroki-core 8000 | head -1)
-curl -sf -o /dev/null -w "%{http_code}" "http://$KR/graphviz/svg/eNpLyUwvSizIUHBXqPZIzcnJVwjPL8pJUQQAgKQIAA=="
-
-# databases behind the apps
-for c in metabase-postgres wallabag-db wikijs-db pastebooks-db; do   # glean-postgres is down by design
-  printf '%-20s %s\n' "$c" "$(sudo docker inspect -f '{{.State.Health.Status}}' $c 2>/dev/null)"
+# 6. Backing databases — read the healthcheck rather than assuming the app's 200 covers it
+for c in $(docker ps --format '{{.Names}}'); do
+  s=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$c" 2>/dev/null)
+  [ -n "$s" ] && printf '%-28s %s\n' "$c" "$s"
 done
 ```
 
 **PASSED 2026-08-03 — 41 published ports swept, every service accounted for, nothing down.**
 
-- [x] Port sweep: every port that was listening at baseline is listening again — **41 ports**
-      (baseline 40). Two returned `000` and **both are false alarms from probing with the wrong
-      protocol**, not dead services:
-      - **2223 — Gitea SSH, not HTTP.** Verified properly with `ssh -T -p 2223`, which
-        authenticated: *"You've successfully authenticated with the key named kinscoe@kevin"*.
-      - **8000 — checkmk over HTTPS.** `curl http://` cannot speak to a TLS listener and yields
-        `000`. `curl -k https://127.0.0.1:8000/` returns **404**, so the server is responding.
-      Every other non-200 is normal and expected: `400` on garage:3903 (S3 API rejecting a bare
-      GET), `403` on garage:26771 (admin API wanting auth), `404` on c3x-api (no root route), and
-      assorted `302`/`307` auth redirects (checkmk, pgadmin, wallabag, openbao, convertx, lxconsole,
-      karakeep, cadvisor).
-- [x] OpenBao unsealed (see QA-6) — initialized, unsealed, active
-- [x] Garage reports healthy — **the `docker exec garage garage status` command in this checklist
-      cannot work.** The image is **distroless**: it has no `sh` and no `garage` on `PATH`, so the
-      exec fails with `executable file not found in $PATH`. That is an artifact of the check, not a
-      fault. Garage is confirmed up over HTTP — 3903 → 400 and 26771 → 403, both correct responses
-      for an unauthenticated bare GET against the S3 and admin APIs.
-- [x] Gitea API responds and its SSH port answers — API reports **`{"version":"1.25.4"}`**; SSH on
-      2223 authenticates as above
-- [x] RSSHub returns feed data — `/healthz` returns `ok`
-- [x] Woodpecker agent reconnected to the server — both `woodpecker-server` and `woodpecker-agent`
-      are `Up 21 hours (healthy)`. The checklist's `grep -i 'connect\|error'` finds nothing because
-      the agent logs only two startup lines; the Docker healthcheck is the stronger signal.
-- [x] YouTrack finished migrating and returns 200 — 200 locally and at
-      `https://youtrack.kevininscoe.com/`
-- [x] Kroki renders a diagram — **the encoded diagram string in this checklist is corrupt** and
-      returns `400`. Kroki itself is fine: a freshly-encoded diagram returns **200** and real SVG,
-      by both GET and POST. Generate the string rather than reusing the literal:
-      ```bash
-      ENC=$(python3 -c "import zlib,base64;print(base64.urlsafe_b64encode(zlib.compress(b'digraph G {Hello->World}',9)).decode())")
-      curl -s -o /dev/null -w '%{http_code}\n' "http://$(docker port kroki-core 8000 | head -1)/graphviz/svg/$ENC"
-      ```
-- [x] All backing databases report `healthy` — `metabase-postgres`, `wallabag-db`, `wikijs-db`,
-      `pastebooks-db` all `healthy`. Swept the whole fleet as well: **no container anywhere reports
-      an unhealthy healthcheck.**
+- [x] Port sweep: every port listening at baseline is listening again — 41 ports, one more than
+      the baseline's 40, nothing down. **Four classes of misleading result showed up, and all four
+      recur on any fleet:**
+      - **`000` from probing the wrong protocol.** Two ports returned `000`, which reads as
+        "nothing listening" — and both were healthy. One was an **SSH** port being probed with
+        `curl http://`; it answered correctly to `ssh -T -p <port>`. The other was **HTTPS**, and
+        `curl http://` cannot speak to a TLS listener. `curl -k https://…` returned 404, proving
+        the server was up. **`000` means "this probe could not speak the protocol", not "dead".**
+      - **Non-200 codes that are correct.** An S3 API returns `400` to a bare unauthenticated
+        `GET`; an admin API returns `403`; an API with no root route returns `404`; anything behind
+        auth returns `302`/`307`. All are proof the service is *answering*. Treat `2xx`, `3xx`,
+        `401` and `403` as up, and only `000` as suspicious — then re-probe it properly.
+      - **A distroless image has no shell.** A `docker exec <container> <binary> status` check
+        failed with `executable file not found in $PATH` — not because the service was broken, but
+        because the image ships no `sh` and no binary on `PATH`. **That is a defect in the check,
+        not in the service.** Verify distroless containers over their network interface instead.
+      - **A hardcoded test payload rots.** A render check carried a literal base64-encoded
+        diagram that had become corrupt, returning `400` and reading as a broken renderer. A
+        freshly generated payload returned `200` and valid SVG. Generate test inputs; never paste
+        a literal into a checklist that will be re-run years later.
+- [x] Secret store unsealed (see QA-6)
+- [x] Agent/worker pair reconnected — the checklist's `grep -i 'connect\|error'` over the agent log
+      found nothing, because the agent logs only two lines at startup. **Absence of an error string
+      is not evidence of health**; the container healthcheck was the stronger signal.
+- [x] All backing databases report `healthy`, and a sweep of the whole fleet found **no container
+      anywhere reporting an unhealthy healthcheck.**
 
-**[HUMAN]** — spot-check a few UIs in browser to confirm they render correctly (not just HTTP 200):
-- [x] Gitea: `https://git.kevininscoe.com` — login works, repos visible — **Kevin confirmed
-      2026-08-05: renders fine**
-- [x] Woodpecker CI: `https://woodpecker-ci.kevininscoe.com` — can see pipelines — **Kevin
-      confirmed 2026-08-05: renders fine**
-- [x] OpenBao: `https://openbao.kevininscoe.com/ui` — can log in and read secrets — **Kevin
-      confirmed 2026-08-05: renders fine**
+**[HUMAN]** — spot-check a few web UIs in a browser to confirm they *render*, not merely return 200.
+Pick ones that exercise different stacks: a server-rendered app, a single-page app, and anything
+behind a login.
 
-**QA-5 is CLOSED, 2026-08-05.** Both halves pass: the `[AI]` sweep on 2026-08-03 (41 published
-ports, every service accounted for) and the `[HUMAN]` render check today, backed by the asset-level
-pre-verification below.
+- [x] All three sampled UIs render correctly — confirmed 2026-08-05.
+
+**QA-5 is CLOSED, 2026-08-05.** Both halves pass: the `[AI]` port and endpoint sweep on 2026-08-03,
+and the `[HUMAN]` render check, backed by the asset-level pre-verification below.
 
 #### AI pre-verification of the three UIs — 2026-08-05
 
@@ -910,33 +899,32 @@ is left for a human is genuinely only what needs eyes and a login.
 Every asset each page references was fetched individually. **18 of 18 returned 200 with the
 correct MIME type**, and each app shell carries the markers its framework needs to boot:
 
-| Service | Document | Assets | Shell markers |
+| App type | Document | Assets | Shell markers checked |
 |---|---|---|---|
-| Gitea | 200, 13.7 KB, `<title>My private git repos</title>` | 3/3 — `index.css` 322 KB, `theme-gitea-auto.css` 21 KB, `index.js` 273 KB | `id="navbar"` rendered, `/user/login?redirect_to=%2f` and `/explore/repos` links present — the correct **unauthenticated** state, not an error page |
-| Woodpecker | 200, 857 B, `<title>Woodpecker</title>` | 5/5 — `index-BjKYnmqw.js` 483 KB, `index-DYOv0lf6.css` 45 KB | `<div id="app">` mount point present; `/web-config.js` serves a real bootstrap — **v3.7.0**, `WOODPECKER_USER = null` (correct, unauthenticated), and `WOODPECKER_USER_REGISTERED_AGENTS = true`, which independently corroborates the agent-registration check above |
-| OpenBao | 200, 1.0 MB, `<title>OpenBao</title>` | 8/8 — `vendor.js` 2.6 MB, `vault.js` 1.6 MB, `vault.css` 359 KB all intact | Ember boot meta `name="vault/config/environment"` and `id="ember-basic-dropdown-wormhole"` both present |
+| Server-rendered app | 200, 13.7 KB, real `<title>` | 3/3 CSS+JS | Navigation chrome rendered, and the login/browse links of a correct **unauthenticated** page rather than an error page |
+| Single-page app | 200, 857 B shell | 5/5 | The SPA mount `<div>` present, and its runtime config endpoint serving a real bootstrap — version, session state, and a flag that independently corroborated the agent-registration check above |
+| Ember-based app | 200, 1.0 MB | 8/8 — a 2.6 MB vendor bundle and 1.6 MB app bundle both intact | The framework's boot `<meta>` and its root mount node both present |
 
-Two Woodpecker assets — `/assets/custom.css` and `/assets/custom.js` — return **200 with 0 bytes**.
-That is correct: they are Woodpecker's optional user-customization hooks, and
-`/opt/containers/woodpecker-ci/docker-compose.yml` mounts **no** file over either, so they are the
-upstream empty placeholders rather than a mount that broke. A 404 there would have been the
-finding; an empty file is not.
+Two assets returned **200 with 0 bytes**, which looked like truncation. They were not: they were
+the upstream image's **optional user-customization hooks**, over which the compose file mounted
+nothing — empty by design. A **404** there would have been a real finding; an empty file was not.
+Check whether something is *supposed* to be empty before treating zero bytes as damage.
 
-**TLS is healthy on all three** — one certificate, `CN=kevin.kevininscoe.com`, valid to
-**2026-10-22**, verifying cleanly (`ssl_verify_result=0`) on every request. Served by
-Apache/2.4.68 with OpenSSL 3.5.7, both current F43 builds.
+**TLS was healthy across all three** — one certificate covering them, verifying cleanly
+(`ssl_verify_result=0`) on every request, with more than two months to expiry, served by the
+current F43 Apache and OpenSSL builds.
 
 *Method note for a future upgrade:* fetch the page, extract every `src=`/`href=` ending in `.js`
 or `.css`, and request each one. `curl` against the page alone cannot distinguish a working app
 from a white screen — the assets are where an upgrade actually breaks a UI. The
-`woodpecker-server` and `garage` images are **distroless**, so `docker exec … ls` fails on them;
+some images are **distroless**, so `docker exec … ls` fails on them;
 verify their files over HTTP instead.
 
-### QA-6 — OpenBao Unsealed
+### QA-6 — Secret Store Unsealed (OpenBao / Vault)
 
 **[AI]**
 ```bash
-curl -s https://openbao.kevininscoe.com/v1/sys/health | python3 -m json.tool
+curl -s https://<host>/v1/sys/health | python3 -m json.tool
 ```
 
 **PASSED 2026-08-03 — no unsealing needed.**
@@ -945,31 +933,36 @@ curl -s https://openbao.kevininscoe.com/v1/sys/health | python3 -m json.tool
 - [x] `"sealed": false`
 - [x] `"standby": false`
 
-OpenBao **2.5.2**, cluster `vault-cluster-3b8b6f0d`, responding over HTTPS. Note the pre-upgrade
-warning that OpenBao "seals on every restart" did **not** bite here — it came through both the
-2026-08-01 and 2026-08-02 reboots unsealed and did not need the 3 keys.
+OpenBao **2.5.2**, responding over HTTPS.
 
-If sealed, unseal with 3 keys (see openbao RUNBOOK.md).
+**The general point for any sealed secret store.** A sealed instance still answers HTTP and still
+returns 200 — so a reachability check passes while every consumer of the secrets fails. Assert on
+`"sealed": false`, never on the status code. Plan for the unseal keys to be needed after any
+reboot, and treat it as a pleasant surprise when they are not: this instance came through two
+reboots still unsealed, which is *not* something to design around.
 
-### QA-7 — YouTrack Migration Complete
+### QA-7 — Container Data Migration Complete
 
-**[AI]** — only relevant if YouTrack image was updated as part of this upgrade:
+Applies to any container whose image was updated as part of the upgrade and which runs a schema
+or data migration on first start.
+
+**[AI]**
 ```bash
-sudo docker logs youtrack --tail 30 2>&1 | grep -E "ready|migration|error"
+sudo docker logs <container> --tail 30 2>&1 | grep -E "ready|migration|error"
 ```
 
 **PASSED 2026-08-03.**
 
-- [x] Log contains "YouTrack is ready" (not still migrating) — **the grep as written returns
-      nothing, and that is a false alarm.** The container has been up ~10 hours, so the startup
-      banner has long since rolled out of `--tail 30`. This check is only meaningful in the first
-      minutes after a restart. Health confirmed instead by live activity: current `INFO` logging
-      (permission-cache rebuilds, workflow script attachment) and `https://youtrack.kevininscoe.com/`
-      returning **200**.
-- [x] No ERROR lines in last 30 log entries — none present.
+- [x] Migration finished and the app reports ready — **but the grep as written returned nothing,
+      and that was a false alarm worth understanding.** The container had been up ~10 hours, so
+      the startup banner had long since rolled out of `--tail 30`.
 
-Separately: `youtrack-export.service` (the daily exporter, a different unit) **is** failing, on an
-application bug unrelated to the upgrade. See QA-1.
+      **A `--tail N` grep for a startup banner is only meaningful in the first minutes after a
+      restart.** Run later, it reports failure for a perfectly healthy service — and the natural
+      reaction, restarting the container to "fix" it, is exactly wrong during a migration. Confirm
+      health from *current* behaviour instead: live `INFO` activity in the log and a 200 from the
+      application's own endpoint.
+- [x] No ERROR lines in the recent log — none present.
 
 ### QA-8 — Backup Scripts Still Executable
 
@@ -987,12 +980,12 @@ done
 > access, and work fine at `container_file_t`; 9 backup scripts sit at `container_file_t` and back up
 > normally. Check the unit's `ExecStart` before "fixing" a label.
 >
-> This is exactly how `gitea-backup` broke on 2026-08-01: it is the only unit that directly execs a
-> script under `/opt/containers`, the script was rewritten on Jul 31 and inherited
-> `container_file_t` from the parent rule, and no `restorecon` followed. Note that a durable
-> `semanage fcontext` rule for it **already existed** — so the fix is `restorecon`, not `chcon`, and
-> plain `restorecon` will refuse (it reads the wrong label as an admin customization when the user
-> prefix is `unconfined_u`). Use `-F`:
+> **How this breaks in practice.** One unit on this host directly exec'd its script. The script was
+> rewritten a few days before the upgrade, **inherited `container_file_t` from the parent directory
+> rule**, and no `restorecon` followed — so it failed with `203/EXEC` and "Permission denied". Note
+> that a durable `semanage fcontext` rule for it **already existed**, so the correct fix is
+> `restorecon`, not `chcon` — and plain `restorecon` will *refuse*, because it reads the wrong label
+> as a deliberate admin customization when the user prefix is `unconfined_u`. Force it with `-F`:
 >
 > ```bash
 > sudo restorecon -F -v /opt/containers/<name>/<script>.sh
@@ -1004,33 +997,41 @@ Scripts that a unit execs directly must show `bin_t`. If one shows `container_fi
 sudo chcon -t bin_t /opt/containers/<name>/backup.sh
 ```
 
-- [x] All backup.sh files have `bin_t` label — **PASSED 2026-08-03, but the check as written
-      points at the wrong directory.** Verified by checking each unit's `ExecStart` first, per the
-      2026-08-01 correction above.
+- [x] Scripts that units exec directly carry `bin_t` — **PASSED 2026-08-03, but the check as
+      written inspects the wrong directory**, and that is the reusable finding here.
 
-      **All 13 `/opt/containers/*/backup.sh` are `container_file_t`, and that is correct** — not
-      one of them is exec'd directly. Reading the raw label list alone would suggest 13 broken
-      scripts; it does not.
+      **Every script under the container tree read `container_file_t` — and every one of them was
+      correct**, because not one was exec'd directly. Reading the raw label list alone suggests a
+      dozen broken scripts. It does not mean that.
 
-      **The scripts that are exec'd directly live in `/usr/local/sbin/automation/`, not under
-      `/opt/containers`.** Ten `*-backup.service` units point there — `actualbudget`, `argus`,
-      `checkmk`, `karakeep`, `kavita`, `n8n`, `pastebooks`, `portainer`, `wikijs`, `youtrack`.
-      Every script in that directory carries **`bin_t`**, so nothing is broken. That directory is
-      what a future run of this check should inspect.
+      **The scripts that *are* exec'd directly live somewhere else entirely** — a separate
+      `sbin`-style automation directory, where every file already carried `bin_t`. Nothing was
+      broken.
 
-      `gitea-backup` — the unit that broke this way on 2026-08-01 — now has
-      `ExecStart=/bin/bash <script>`, so it no longer execs directly and cannot regress the same
-      way. No `*-backup.service` is in a failed state.
+      So the check must be driven **from the units, not from a directory listing**: resolve each
+      unit's `ExecStart`, and only then look at the label of whatever it actually runs.
+
+      ```bash
+      # Enumerate what units really exec, then label-check exactly those paths
+      systemctl show '*.service' -p Id -p ExecStart --value 2>/dev/null \
+        | grep -oE '/[^ ]+\.sh' | sort -u \
+        | while read -r f; do printf '%s  %s\n' "$(ls -Z "$f" | awk '{print $1}')" "$f"; done
+      ```
+
+      The unit that broke this way before the upgrade was also **fixed structurally rather than by
+      relabelling**: its `ExecStart` now reads `/bin/bash <script>`, so it no longer execs directly
+      and cannot regress the same way. Changing the invocation is more durable than chasing the
+      label.
 
 ### QA-9 — Backup Timers Active
 
 **[AI]**
 ```bash
 systemctl list-timers --all | grep -E "backup|verify"
-ls -l /etc/cron.d/glean-backup && systemctl is-active crond
+ls -l /etc/cron.d/ && systemctl is-active crond
 ```
 
-**PASSED 2026-08-03**, with one piece of stale cruft found — see the Glean item.
+**PASSED 2026-08-03**, with one piece of stale cruft found — see the cron item below.
 
 - [x] All **38** backup/verify timers listed and showing a next trigger time — **39** now match,
       one more than the baseline, all with a next trigger.
@@ -1039,59 +1040,69 @@ ls -l /etc/cron.d/glean-backup && systemctl is-active crond
       `systemctl show -p NextElapseUSecRealtime` confirmed it was scheduled normally. Query the
       property rather than trusting the table.
 - [x] No timer in `failed` state — none.
-- [x] Glean's cron backup entry survived the upgrade and `crond` is active — it survived, `crond`
-      is active, **and that is now a problem rather than a pass.** This check predates Glean's
-      decommission on the same day. `/etc/cron.d/glean-backup` still runs
-      `/opt/containers/glean/backup-glean.sh` as root nightly at 02:30, and it has been **failing
-      every night since**: `/var/log/glean-backup.log` contains only
-      `Error response from daemon: No such container: glean-postgres`.
-      It fails silently — cron does not alert, and nothing watches that log.
-      **Removed 2026-08-03**, backed up to
-      `/home/backups/removed-cron-entries/glean-backup.removed-20260803` first. Logged in
-      `~/ai/fedora/CHANGELOG.md` (`dc0dcab`). Glean's data and script were left in place; only the
-      schedule was removed.
-      **For the next upgrade: rewrite this check.** "Did the cron entry survive?" is the wrong
-      question — it survived, and that was the fault. Ask instead whether each surviving scheduled
-      job still has a service to act on.
+- [x] The cron backup entry survived the upgrade and `crond` is active — it did, **and that turned
+      out to be the fault rather than the pass.**
 
-Run one manual backup to confirm the full pipeline works end-to-end:
+      The entry backed up a stack that had been **decommissioned days earlier**. It had been
+      failing every night since, with its log containing nothing but
+      `Error response from daemon: No such container: …`. It failed **completely silently**: cron
+      does not alert on a non-zero exit, nothing watched the log, and because a `/etc/cron.d` job
+      has no systemd unit it was invisible to `systemctl --failed` too.
+
+      **A cron-only job is outside every failure channel a systemd host normally has.** That is
+      worth a dedicated sweep of `/etc/cron.d`, `/etc/crontab`, `/etc/cron.*` and user crontabs
+      after any decommission, not just after an upgrade.
+
+      **Rewrite this check for next time.** "Did the scheduled job survive the upgrade?" is the
+      wrong question — it survived, and surviving *was* the problem. Ask instead: **does every
+      surviving scheduled job still have a service to act on?**
+
+Run one backup by hand to prove the pipeline end-to-end, rather than trusting that the timers are
+merely *listed*:
+
 ```bash
-sudo systemctl start woodpecker-ci-backup.service
-journalctl -u woodpecker-ci-backup.service -n 20 --no-pager
+sudo systemctl start <name>-backup.service
+journalctl -u <name>-backup.service -n 20 --no-pager
 ```
 
-- [x] Manual backup completes without error — **PASSED 2026-08-03.**
-      `woodpecker-ci-backup.service` ran clean end to end: wrote
-      `/home/backups/woodpecker-ci/woodpecker-ci-2026-08-03.tar.gz` (1.9 MB), sent its
-      `gatus-ping` heartbeat (`success=true`), and deactivated successfully. Confirms the full
-      pipeline — script, SELinux labels, Docker, destination, and monitoring — works under F43.
+- [x] Manual backup completes without error — **PASSED 2026-08-03.** It wrote a correctly sized
+      artifact, emitted its monitoring heartbeat, and deactivated cleanly. That single run
+      exercises the whole chain at once — script, SELinux labels, container runtime, destination
+      filesystem, and monitoring — which no amount of `list-timers` output can do.
 
-### QA-10 — Kasm Workspaces
+### QA-10 — Application Suite Installed Outside dnf and Compose
 
-> **Not applicable as written.** Kasm was already **down and disabled before the upgrade** — all 8
-> containers exited, `kasm.service` disabled and inactive. The checks below only apply once Phase 6's
-> "decide Kasm's fate" question is answered and Kasm is deliberately brought back.
+Applies to any large application suite installed outside `dnf` and outside `docker compose` —
+here, a self-contained workspace platform under `/opt`.
+
+> **Not applicable as written.** The suite was already **down and disabled before the upgrade** —
+> all 8 containers exited, its service unit disabled and inactive. The checks below only apply once
+> a decision is made to bring it back.
 
 **[AI]** — confirm nothing changed unexpectedly:
 ```bash
-sudo docker ps -a | grep kasm       # expect: still exited
-systemctl is-enabled kasm.service   # expect: disabled
-ls /opt/kasm                        # expect: still installed, 1.18.1
+sudo docker ps -a | grep <suite>        # expect: still exited, with pre-upgrade timestamps
+systemctl is-enabled <suite>.service    # expect: disabled
+ls /opt/<suite>                         # expect: still installed, same version
 ```
 
-- [x] Kasm still down and disabled — matches baseline, no action needed — **2026-08-05**. All 8
-      containers `Exited`, none restarting: `kasm_proxy` (137), `kasm_api` (137), `kasm_agent` (1),
-      `kasm_manager` (1), `kasm_db` (0) exited 9 days ago; `kasm_rdp_https_gateway` (1),
-      `kasm_rdp_gateway` (1), `kasm_guac` (140) 11 days ago. Every exit predates the 2026-08-01
-      upgrade, so the upgrade neither started nor stopped anything here.
-      `kasm.service` is `disabled` and `inactive`.
-- [x] `/opt/kasm` intact (the snapshot from Phase 2.4 is the safety net) — **2026-08-05**.
-      Present, still 1.18.1 (`/opt/kasm/1.18.1`, `bin`, `current`, `RUNBOOK.md`).
+- [x] Still down and disabled — matches baseline, no action needed — **2026-08-05**. All 8
+      containers `Exited`, none restarting, and **every exit timestamp predates the upgrade** by
+      9–11 days. That timestamp check is the whole verification: it proves the upgrade neither
+      started nor stopped anything here. The service unit is `disabled` and `inactive`.
+- [x] Install tree intact (the Phase 2.4 snapshot is the safety net) — **2026-08-05**, present and
+      still at the pre-upgrade version.
 
-Only if Kasm is being restored:
-- [ ] All 8 Kasm containers `Up`, `kasm.service` active
-- [ ] **[HUMAN]** Log into the Kasm web UI and launch a workspace session
-- [ ] `kasm-network-plugin.service` running
+> **The general lesson.** A suite installed *outside* both the package manager and the container
+> orchestrator is upgraded by neither, and is invisible to `systemctl --failed` and
+> `docker compose ps` alike. It needs its own explicit QA step — and, since nothing will restore it
+> for you, its own snapshot taken before the upgrade begins.
+
+Only if the suite is being restored:
+- [ ] All containers `Up`, service unit active
+- [ ] **[HUMAN]** Log into its web UI and start a real session — the only check that exercises the
+      full stack
+- [ ] Any auxiliary units (network plugins, agents) running
 
 ### QA-11 — Snap Apps
 
@@ -1112,9 +1123,10 @@ systemctl status snapd --no-pager
       `Result=success` (correct — it is a boot-time oneshot, not a long-running unit).
       snapd is **2.76.1**, the F43 build; no snap unit appears in `systemctl --failed`.
 
-  > Worth recording: `snapd.socket` was one of the units that **failed on 2026-08-01** during the
-  > broken-policy window and was recovered by hand. It has come up cleanly on its own across the
-  > two reboots since, which is what closes it out rather than the recovery itself.
+  > Worth recording: `snapd.socket` was one of the units that **failed during the broken-policy
+  > window** on upgrade day and was recovered by hand. It has since come up cleanly on its own
+  > across two reboots — and **that**, not the manual recovery, is what closes it out. A service
+  > you restarted by hand is not proven until it survives a reboot without you.
 
 **[HUMAN]**
 - [x] Launch one snap app (e.g. shortwave) to confirm it opens — **PASSED 2026-08-05.** Kevin ran
@@ -1127,7 +1139,7 @@ Launching `shortwave` prints:
 
 ```
 libpxbackend-1.0.so: cannot open shared object file: No such file or directory
-Failed to load module: /home/kinscoe/snap/shortwave/common/.cache/gio-modules/libgiolibproxy.so
+Failed to load module: ~/snap/<app>/common/.cache/gio-modules/libgiolibproxy.so
 ```
 
 **What it is.** GLib's libproxy-backed proxy resolver (`libgiolibproxy.so`) `dlopen()`s
@@ -1255,7 +1267,7 @@ gone too. `dnf history` holds no record of `mesa-va-drivers-freeworld` ever bein
 likeliest reading is that it was never installed and this gap long predates F43.
 
 **The consequence while it stands:** all H.264/HEVC video on this host decodes on the CPU —
-browsers, `mpv`, and Kasm Workspaces (which streams video by design) — while a working, initialized
+browsers, `mpv`, and a remote-desktop suite that streams video by design — while a working, initialized
 UVD block sits idle. On a host already running 67 containers that is wasted CPU and heat, most
 noticeably on 4K HEVC.
 
@@ -1325,14 +1337,14 @@ rpm -qa | grep -i '^salt' || echo 'salt absent — expected'
 
 ### QA Sign-off
 
-> **QA COMPLETE — 2026-08-05 07:19.** Every check QA-1 through QA-13 has passed. QA-10 (Kasm)
-> and QA-13 (Salt) were no-ops by design and are recorded as such.
+> **QA COMPLETE — 2026-08-05 07:19.** Every check QA-1 through QA-13 passed. QA-10 and QA-13 were
+> no-ops by design and are recorded as such.
 
 - [x] All QA-1 through QA-13 checks passed (or failures documented with workarounds applied)
-      — note QA-10 (Kasm) and QA-13 (Salt) are both no-ops by design
+      — note QA-10 and QA-13 are both no-ops by design
 - [x] Date/time of completed QA: **2026-08-05 07:19 EDT** (upgrade performed 2026-08-01)
 - [x] Kernel version running: **`7.1.5-101.fc43.x86_64`**, SELinux **enforcing** (targeted)
-- [x] Container count (expect 67; baseline 73 less Glean's six): **67** — exactly as predicted.
+- [x] Container count matched the prediction exactly — the baseline count, less the six belonging to a stack decommissioned deliberately beforehand.
       **0 restarting, 0 unhealthy.**
 - [x] Salt absent (removed pre-upgrade): **confirmed** — `rpm -qa | grep -i '^salt'` returns
       nothing
@@ -1386,33 +1398,32 @@ rollback set and `installonly_limit=5` governs it. **Now safe to prune**: QA-12 
 
 ## Post-Upgrade Notes
 
-- [ ] Update this checklist with any issues encountered and how they were resolved
-- [x] Create RUNBOOK.md files for the 7 containers that were missing them — DONE 2026-04-26 (actualbudget, excalidraw, karakeep, n8n, pastebooks, wikijs, youtrack)
-- [x] Add Fedora 43 upgrade notes to existing RUNBOOK.md files — DONE 2026-04-26 (convertx, filestash, garage, gitea, glean, home_file_server, kroki, openbao, rsshub, woodpecker-ci)
-- [ ] Run `sudo dnf distro-sync` to realign any 3rd-party packages to F43 equivalents
-- [ ] **Decide Kasm's fate** (Phase 6) — it has been down and disabled since before the upgrade.
-      **Deliberately parked by Kevin 2026-08-05** — he will get to it when he can. This is a
-      standing decision, not a forgotten item: Kasm stays down and disabled, `/opt/kasm` stays
-      intact at 1.18.1, and the Phase 2.4 snapshot at `/home/backups/kasm-snapshot-20260801`
-      (3.4 GB) remains the safety net. QA-10's `[AI]` half confirmed all of that on 2026-08-05,
-      and QA-10 did not block sign-off.
-- [x] **Salt** — removed from the host on 2026-08-01 rather than carried across the upgrade
-- [ ] **Plan the 43 → 44 upgrade.** F44 is already released, so F43 is N-1 with a limited support
-      window — and F44 carries the newer Salt. Do not repeat the F42 situation of sitting on an EOL
-      release.
-- [ ] Add systemd units for the 20 stacks that have none, or record deliberately that they are
-      manual-start only (they did not survive this reboot without hand-holding)
-- [ ] Resume the Glean decommission — now tracked in `/opt/containers/TODO.md`. It is stopped and
-      disabled with all data intact; the open question is whether the stored articles need keeping.
-- [x] **Bump Fedora version references from 42 → 43** — **DONE 2026-08-05.** This was deliberately deferred during the 2026-07-22 `fedora/` → `FLDW/` rename because the host was still on F42; all three source-of-truth files were aligned to F42 then so they matched the live host until the upgrade actually happened. All four spots now read "Fedora Linux 43":
-  - [x] `~/ai/me.md` — *Systems and Environments* section. **Edited; uncommitted** — see the note below.
-  - [x] `~/ai/directives/kevins-federated-unix-universe.md` — the `FLDW` row in the Home table and the `FLDW` *Host-specific parameters* Description (two spots). **Edited; uncommitted** — see the note below.
-  - [x] Service catalog `~/Projects/private/fedora-dashboard/kevins-federated-unix-universe-services.md` — the `kevin.network.kevininscoe.com` FLDW fleet-host row. **Committed and pushed, `e8346c3`**, per that repo's own rule.
-
-  > **The two `~/ai` edits are written but NOT committed**, deliberately. At the time of the
-  > change, `~/ai` held **three** sessions' uncommitted work tangled across the same two files:
-  > this F42 → F43 bump, another agent's `john` host-registry addition (plus its matching FLDW
-  > change log entry), and a third party's rewrite of the 2026-08-05 certbot entry. Staging
-  > `fedora/CHANGELOG.md` or `kevins-federated-unix-universe.md` by path would sweep all of it
-  > into one commit. That other agent was itself blocked asking Kevin the same question. Kevin
-  > decides how `~/ai` gets committed.
+- [ ] Update this checklist with any issues encountered and how they were resolved. **Correct it in
+      place** — a checklist whose commands were wrong is worse than no checklist, and several here
+      turned out to be (see QA-5's distroless `docker exec` and its stale encoded test payload).
+- [x] Write a `RUNBOOK.md` for every container that lacked one, and add upgrade notes to those that
+      had one — done before the upgrade, and worth doing then rather than after. The upgrade is
+      when you discover which services you cannot confidently restart.
+- [ ] Run `sudo dnf distro-sync` to realign any third-party packages to their F43 equivalents.
+- [ ] **Decide the fate of anything deliberately left down.** A suite that was disabled *before*
+      the upgrade will still be disabled after it, and it quietly stops being a decision and starts
+      being a fact. Either bring it back and QA it, or retire it and reclaim the disk.
+- [x] **Remove packages that will break on the new release rather than carrying them across.** One
+      configuration-management stack was uninstalled beforehand because it was already outmoded and
+      was about to break on the new Python. Removing it turned a likely upgrade blocker into a
+      non-event — but note that this class of removal is **irreversible in practice**: its state
+      (accepted keys, enrolled nodes) does not come back with a reinstall. Confirm the tool is
+      genuinely being retired, not merely paused.
+- [ ] **Plan the next upgrade now.** F44 was already released when this one finished, which makes
+      F43 an N-1 release on a limited support window. The situation to avoid is the one that
+      prompted this upgrade: sitting on an EOL release and having to move under pressure.
+- [ ] **Give every service a systemd unit, or record deliberately that it is manual-start.** Around
+      20 Compose stacks here have no unit. They happened to come back on their own, but nothing
+      guaranteed it — and a stack with no unit is invisible to `systemctl --failed`, so its absence
+      after a reboot is silent.
+- [x] **Update every place that records the OS version.** Host inventories, service catalogs,
+      configuration-management variables, monitoring metadata, and AI context files all tend to
+      carry a hardcoded release number. None of them break loudly when it goes stale — they simply
+      start telling you, and any tooling that reads them, something false. Grep for the old release
+      string across every repository that describes the host, and fix them in the same pass that
+      closes QA.
