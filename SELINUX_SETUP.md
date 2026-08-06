@@ -104,7 +104,7 @@ Active module name is `setroubleshoot-fix` (installed 2026-05-02; `selinux-polic
 
 ### 5. `rsync_t` `dac_override` Denials (backup services)
 
-**Problem**: `rsync` denied `{ dac_override }` when run from `backup-mail-servers.service` and `backup-web1.service`. Root-owned files (e.g. `/var/log`, `/root`) silently skipped with no non-zero exit code.
+**Problem**: `rsync` denied `{ dac_override }` when run from `backup-<remote-host-c>.service` and `backup-<remote-host-b>.service`. Root-owned files (e.g. `/var/log`, `/root`) silently skipped with no non-zero exit code.
 
 **Cause**: The base `rsync_t` policy does not grant `dac_override`. Rsync needs it to read files owned by root or other users and to preserve ownership metadata on the receiving end.
 

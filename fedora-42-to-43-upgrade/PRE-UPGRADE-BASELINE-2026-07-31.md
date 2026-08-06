@@ -125,9 +125,9 @@ docker ps --format '{{.Names}}\t{{.Ports}}' | grep -E '0\.0\.0\.0|127\.0\.0\.1' 
 
 All were scheduled with a valid next-trigger time and none were in a failed state.
 
-`actualbudget-backup`, `argus-backup`, `backup-beszel`, `backup-core`, `backup-donetick-from-web1-to-local`,
-`backup-filebrowser`, `backup-from-web1-to-local`, `backup-matomo-from-mail1-to-local`, `backup-picoshare`,
-`backup-qui`, `backup-unclutter-from-web1-to-local`, `backup-web1-openbao`, `backupmysql`, `c3x-backup`,
+`actualbudget-backup`, `argus-backup`, `backup-beszel`, `backup-<remote-host-a>`, `backup-donetick-from-<remote-host-b>-to-local`,
+`backup-filebrowser`, `backup-from-<remote-host-b>-to-local`, `backup-matomo-from-<remote-host-c>-to-local`, `backup-picoshare`,
+`backup-qui`, `backup-unclutter-from-<remote-host-b>-to-local`, `backup-<remote-host-b>-openbao`, `backupmysql`, `c3x-backup`,
 `checkmk-backup`, `convertx-backup`, `dashboard-backup`, `erugo-backup`, `garage-backup`, `gitea-backup`,
 `gitea-backup-verify`, `karakeep-backup`, `kavita-backup`, `kroki-backup`, `lxconsole-backup`,
 `metabase-backup`, `n8n-backup`, `openbao-backup`, `pastebooks-backup`, `pgadmin-backup`,

@@ -6,9 +6,9 @@ Personal notes, observations, and fixes for a **Fedora Linux** developer worksta
 
 | Item | Detail |
 |------|--------|
-| Host | kevin.kevininscoe.com |
-| OS | Fedora 42 (Adams) → 43 |
-| Kernel | 6.19.13-100.fc42.x86_64 |
+| Host | FLDW (Fedora Linux Development Workstation) |
+| OS | Fedora 43 (KDE Plasma Desktop Edition) — notes span 42 → 43 |
+| Kernel | 7.1.5-101.fc43.x86_64 |
 | Desktop | KDE Plasma 6 |
 | GPU | AMD Radeon PRO WX 7100 (amdgpu, open-source driver) |
 | CPU | AMD Ryzen 5 5500 |

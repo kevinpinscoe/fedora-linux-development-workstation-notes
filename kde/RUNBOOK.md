@@ -1,12 +1,12 @@
 ---
-title: RUNBOOK.md — Fedora KDE Plasma Desktop (kevin workstation)
+title: RUNBOOK.md — Fedora KDE Plasma Desktop (FLDW)
 tags: [runbook, operations]
 vault_link: runbooks/home-kinscoe-projects-public-fedora-notes-kde.md
 source_path: /home/kinscoe/Projects/public/fedora-notes/kde/RUNBOOK.md
 ---
 
 > 📓 Indexed in the PKM knowledge vault at `runbooks/home-kinscoe-projects-public-fedora-notes-kde.md` (symlink → this file).
-# RUNBOOK.md — Fedora KDE Plasma Desktop (kevin workstation)
+# RUNBOOK.md — Fedora KDE Plasma Desktop (FLDW)
 
 ## Metadata
 
@@ -24,7 +24,7 @@ source_path: /home/kinscoe/Projects/public/fedora-notes/kde/RUNBOOK.md
 ## Purpose
 
 > Operational reference for the **KDE Plasma desktop environment** on this Fedora 42
-> workstation (`kevin.kevininscoe.com`, AMD Ryzen 5 5500, 128 GB RAM). Covers the desktop
+> workstation (`FLDW`, AMD Ryzen 5 5500, 128 GB RAM). Covers the desktop
 > session itself — Plasma/KWin, global shortcuts, KRunner, audio/network plumbing as the
 > desktop sees it — and recovery for a wedged session.
 >

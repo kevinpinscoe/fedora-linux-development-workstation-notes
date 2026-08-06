@@ -10,7 +10,7 @@ source_path: /home/kinscoe/Projects/public/fedora-notes/garage/RUNBOOK.md
 
 Operational reference for the self-hosted Garage S3-compatible object store running in the `garage` Docker container on this host.
 
-Endpoint: `https://garage.kevininscoe.com`
+Endpoint: `https://<dns-name-redacted>`
 
 ---
 
@@ -23,7 +23,7 @@ docker exec garage /garage bucket create <bucket-name>
 Example:
 
 ```bash
-docker exec garage /garage bucket create mail1.kevininscoe.com
+docker exec garage /garage bucket create <dns-name-redacted>
 ```
 
 `bucket create` only creates the bucket — **it does not create or print any access/secret keys**. Keys are managed independently and granted to buckets in a separate step (see below).

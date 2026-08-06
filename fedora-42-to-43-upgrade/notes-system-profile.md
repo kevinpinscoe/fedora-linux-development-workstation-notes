@@ -4,7 +4,7 @@ description: Hardware, OS, disk layout, and key services on the main home server
 type: user
 originSessionId: ede1e2fc-66bc-4f7d-96c3-643bbfd91d37
 ---
-## Host: kevin.kevininscoe.com
+## Host: FLDW
 
 **Hardware:**
 - GIGABYTE B550 AORUS ELITE AX V2 motherboard
@@ -30,7 +30,7 @@ on 2026-08-01. Kernel `6.19.14-108.fc42.x86_64`, x86_64. F43 will land on kernel
 **Backups:** ~/bin/backup.sh via systemd (rsync mirrors root→/root_backup, /boot→/boot_backup, /home→/home_backup). Excludes docker overlay2, volumes, containers dirs.
 
 **SELinux:** enforcing (targeted policy), `selinux-policy-42.24-1.fc42`
-**Apache:** httpd 2.4.66 with SSL vhosts in /etc/httpd/conf.d/ssl.conf; main DNS kevin.kevininscoe.com → Tailscale IP
+**Apache:** httpd 2.4.66 with SSL vhosts in /etc/httpd/conf.d/ssl.conf; the FLDW's main DNS record → Tailscale IP
 **Containers:** Fedora `moby-engine` 29.4.2 (**not** Docker CE), `docker-cli` 29.4.2,
 `docker-compose` 5.1.2, `containerd.io` 2.2.4 — 44 Compose stacks / 73 running containers
 **Snapd:** installed and active — snaps: bare, core, core20, core22, core24, ffmpeg-2404,
@@ -38,4 +38,4 @@ gnome-42-2204, gnome-46-2404, gtk-common-themes, mesa-2404, obs-studio, shortwav
 **Config management:** `salt`, `salt-master`, `salt-minion` 3007.5 — **expected to break on F43**
 (Python 3.14 incompatibility; breakage accepted 2026-07-31)
 
-**DNS:** kevininscoe.com CNAMEs → kevin.kevininscoe.com (Tailscale tailnet IP)
+**DNS:** <dns-name-redacted> CNAMEs → FLDW (Tailscale tailnet IP)

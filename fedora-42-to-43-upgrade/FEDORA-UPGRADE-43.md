@@ -1,7 +1,7 @@
 # Fedora 42 → 43 Upgrade Checklist
 
 **Target:** morning of 2026-08-01  
-**Host:** kevin.kevininscoe.com (Fedora 42 Adams, kernel 6.19.14-108.fc42.x86_64)  
+**Host:** FLDW (Fedora 42 Adams, kernel 6.19.14-108.fc42.x86_64)  
 **Desktop:** KDE Plasma 6 (plasmashell 6.6.4)  
 **GPU:** AMD Radeon PRO WX 7100 (amdgpu, open-source only)
 
@@ -161,9 +161,9 @@ Not a systemd timer — run by hand:
 
 Off-host pulls and verifiers — lower priority for the upgrade, but note their state:
 
-- `backup-core`, `backup-from-web1-to-local`, `backup-web1-openbao`,
-  `backup-donetick-from-web1-to-local`, `backup-matomo-from-mail1-to-local`,
-  `backup-unclutter-from-web1-to-local` — pull backups from other k-fed hosts
+- `backup-<remote-host-a>`, `backup-from-<remote-host-b>-to-local`, `backup-<remote-host-b>-openbao`,
+  `backup-donetick-from-<remote-host-b>-to-local`, `backup-matomo-from-<remote-host-c>-to-local`,
+  `backup-unclutter-from-<remote-host-b>-to-local` — pull backups from other k-fed hosts
 - `gitea-backup-verify`, `youtrack-backup-verify` — verification timers
 
 Verify recent timestamps:
@@ -612,7 +612,7 @@ This is caused by Python 3.14 changing how `multiprocessing.popen_forkserver` pi
 2. **Wait for Salt upstream fix** — watch https://github.com/saltstack/salt for a Python 3.14 compat PR.
 3. **Skip Salt on short-lived k3s VMs** — these are rebuilt frequently; manage them via SSH/Ansible instead.
 
-**This host (kevin.kevininscoe.com):** ~~Do NOT upgrade this host to Fedora 43 until Salt Python
+**This host (FLDW):** ~~Do NOT upgrade this host to Fedora 43 until Salt Python
 3.14 compat is confirmed working.~~ **Moot — Salt was removed on 2026-08-01.** See the box at the
 top of this section.
 
