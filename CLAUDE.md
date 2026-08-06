@@ -1,46 +1,70 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 ## What this repo is
 
-A personal knowledge base of notes, observations, and fixes for a Fedora Linux KDE Plasma 6 developer workstation (`kevin.kevininscoe.com`). There is no build system, test suite, or application code — all content is Markdown documentation.
+A public knowledge base of **Fedora Linux findings** — what actually happened during real version upgrades on a working KDE Plasma desktop, and the issues, quirks, and fixes that came out of them.
+
+There is no build system, no test suite, and no application code. Everything here is Markdown.
+
+The value of these notes is **specificity**. They record real upgrades on real hardware: the exact error message, what it turned out to mean, what fixed it, and the command that proves the fix worked. General Fedora advice is already everywhere; observed outcomes with their diagnosis are not.
+
+## Scope — what belongs here
+
+The test is **usefulness to someone else running Fedora**: would a stranger learn anything from this?
+
+| Belongs here | Does not |
+|---|---|
+| A Fedora bug, regression, or packaging gap, and how it presented | One machine's service inventory, port map, or container list |
+| An upgrade failure mode with its root cause and tell-tale symptom | Which of *this* owner's services were down on a given day |
+| A behavior that changed between Fedora releases | Personal configuration choices with no general lesson |
+| Hardware/driver findings tied to an identifiable chipset or kernel version | Host-specific paths, hostnames, credentials, or internal addresses |
+| A checklist or method others could reuse | Task tracking for one person's machine |
+
+Host-specific operational detail is maintained separately, in the `fedora-linux-development-workstation-notes` repo, and is deliberately kept out of this one. When a finding has both a general and a host-specific half, **publish the general half here and leave the specifics out** — usually that means describing the symptom, the cause, and the fix, while replacing an inventory with a command that regenerates it.
+
+A useful heuristic: if removing the machine's identity would make the note meaningless, it probably belongs in the private repo. If the note survives that removal intact, it belongs here.
+
+## Provenance — the machine these findings come from
+
+Recorded so a reader can judge whether a finding applies to them. Several notes here are hardware- or stack-specific and will not generalize.
+
+- **OS:** Fedora Linux (notes span 42 → 43), **SELinux enforcing**, targeted policy
+- **Desktop:** KDE Plasma 6 on Wayland
+- **GPU:** AMD Radeon PRO WX 7100 — GCN4 / Polaris, 2016 part, `amdgpu` open-source driver only, no proprietary stack
+- **Packaging:** `dnf` (DNF 5 from F43 onward), `snap`, RPM Fusion, Flatpak
+- **Containers:** Docker via Fedora's `moby-engine` package — **not** Docker CE, which matters whenever a fix names `docker-ce` packages
+- **Kernel:** the F42 → F43 notes cover a 6.19 → 7.1 jump in a single step
+
+SELinux being **enforcing** is the single most load-bearing item in that list. A large share of these findings would not reproduce on a permissive or disabled host, and several are entirely about label and domain transitions.
 
 ## Conventions
 
-- One subdirectory per topic or major event (e.g. `fedora-42-to-43-upgrade/`).
-- Files prefixed `notes-` are research/planning notes (conversational, may be incomplete).
-- Files without a `notes-` prefix are actionable references: checklists, runbooks, inventories.
-- Checklist items use `- [ ]` / `- [x]` GitHub-flavored Markdown task lists. Mark items `[x]` with the resolution date and a short description inline when they are completed.
-- `resume.sh` is gitignored — it holds a `claude --resume <session-id>` command for the owner's convenience and should never be committed.
+- One subdirectory per topic or major event — e.g. `fedora-42-to-43-upgrade/`.
+- Files prefixed `notes-` are research and planning notes: conversational, and possibly incomplete or superseded.
+- Files without that prefix are actionable references — checklists, runbooks, inventories.
+- Checklist items use `- [ ]` / `- [x]` GitHub-flavored task lists. When closing one, mark it `[x]` and add the resolution date and a short description **inline**, so the file reads as a record rather than a to-do.
+- Corrections are made **in place**. If a note turns out to be wrong, fix it and say so where it stood — do not add a separate "fixed" or "errata" file. A checklist that quietly contradicts itself is worse than one that admits it was wrong.
+- `resume.sh` is gitignored and must never be committed.
 
-## Scope — what belongs here and what does not
+## Redaction
 
-This repo is about **the planning and QA of Fedora upgrades themselves**. Keep it to that.
+This repository is **public**, and some of its source material is not.
 
-Post-upgrade QA routinely turns up host problems that have nothing to do with the upgrade — a misconfigured job, a cron entry failing silently, a service nobody is monitoring. Those findings are **raised in `~/admin/TODO.md`** (the `fedora-admin` repo) for the host-administration agent and Kevin to investigate. Kevin is the gate on any action taken about them. Do not open a tracking section for them here.
+`.gitignore` carries `**/*.local.md` and `**/*.local.txt`. Host detail that would be reconnaissance material — port maps, lists of services running with SELinux confinement disabled, and full `rpm -qa` package manifests — stays in those files and is never published. A package-and-version inventory of an internet-reachable host is the strongest such artifact.
 
-The distinction is cause, not subject matter:
+Where a published note needs that data, it carries a **command that regenerates it live** instead of the data itself. For example, rather than pasting a port table:
 
-| Finding | Goes to |
-|---|---|
-| Caused by, or a regression from, the upgrade | this repo — the relevant `QA-*` section, and `TODO.md` if it stays open |
-| Pre-existing, or unrelated to the upgrade, merely *found* during QA | `~/admin/TODO.md` |
+```bash
+docker ps --format '{{.Names}}\t{{.Ports}}'
+```
 
-When a QA check surfaces something that turns out to be pre-existing, still record in the QA section that it was found and that it was diagnosed as not upgrade damage — then carry the actual task to `~/admin/TODO.md` rather than tracking it in both places. Note also that this repo is **public**: see `.gitignore` for the `*.local.md` / `*.local.txt` convention that keeps host-detail and reconnaissance material unpublished.
-
-## System context (relevant when drafting commands or configs)
-
-- **OS:** Fedora 42 → 43, SELinux enforcing (targeted policy)
-- **Desktop:** KDE Plasma 6
-- **GPU:** AMD Radeon PRO WX 7100 — amdgpu open-source driver only (no AMD proprietary stack)
-- **Package managers:** dnf (upgrading to DNF 5 on F43), snap
-- **Containers:** 17 Docker Compose services under `/opt/containers/`, each managed by a systemd service + optional backup timer
-- **Kasm Workspaces 1.18.1** at `/opt/kasm` — not managed by docker-compose or dnf
-- **Backup:** `~/bin/backup.sh` via systemd rsync mirrors; excludes Docker `overlay2`/volumes
+This keeps the analysis useful without publishing the inventory it was derived from.
 
 ## Adding new content
 
-- New upgrade or migration: create a new subdirectory named `fedora-<from>-to-<to>-upgrade/` or `topic-<name>/`.
-- New container runbook: add `RUNBOOK.md` inside `/opt/containers/<name>/` on the host (not in this repo), then update `notes-container-inventory.md` to reflect its status.
-- Resolved issues: update the relevant checklist file in-place; do not create separate "fixed" files.
+- **New upgrade or migration:** create `fedora-<from>-to-<to>-upgrade/`, or `topic-<name>/` for anything else.
+- **Before an upgrade, capture a baseline** — and include `rpm -qa` in it, kept as `*.local.txt`. A baseline that records running services but not installed packages cannot answer "was this already installed before?", which is the question that actually comes up afterward.
+- **Resolved issues:** update the relevant checklist in place, with the date.
+- **Record what was ruled out, not just what was found.** The reasoning that eliminated a wrong hypothesis is often the most reusable part of a note, and it is what stops the next person re-investigating a dead end.
