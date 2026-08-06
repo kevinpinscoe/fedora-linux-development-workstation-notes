@@ -1,4 +1,4 @@
-# fedora-linux-development-workstation-notes
+# fedora-notes
 
 Personal notes, observations, and fixes for a **Fedora Linux** developer workstation and desktop running **KDE Plasma 6**.
 

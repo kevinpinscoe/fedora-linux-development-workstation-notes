@@ -1,11 +1,11 @@
 ---
 title: RUNBOOK.md — Fedora KDE Plasma Desktop (kevin workstation)
 tags: [runbook, operations]
-vault_link: runbooks/home-kinscoe-fedora-linux-development-workstation-notes-kde.md
-source_path: /home/kinscoe/fedora-linux-development-workstation-notes/kde/RUNBOOK.md
+vault_link: runbooks/home-kinscoe-projects-public-fedora-notes-kde.md
+source_path: /home/kinscoe/Projects/public/fedora-notes/kde/RUNBOOK.md
 ---
 
-> 📓 Indexed in the PKM knowledge vault at `runbooks/home-kinscoe-fedora-linux-development-workstation-notes-kde.md` (symlink → this file).
+> 📓 Indexed in the PKM knowledge vault at `runbooks/home-kinscoe-projects-public-fedora-notes-kde.md` (symlink → this file).
 # RUNBOOK.md — Fedora KDE Plasma Desktop (kevin workstation)
 
 ## Metadata
@@ -17,7 +17,7 @@ source_path: /home/kinscoe/fedora-linux-development-workstation-notes/kde/RUNBOO
 | **Last Tested** | 2026-06-28 |
 | **Expected Duration** | N/A — reference + ad-hoc procedures |
 | **Risk Level** | Low (desktop-session operations; no data risk) |
-| **Repo** | git@github.com:kevinpinscoe/fedora-linux-development-workstation-notes.git |
+| **Repo** | git@github.com:kevinpinscoe/fedora-notes.git |
 
 ---
 
@@ -217,13 +217,13 @@ To remove the `Meta+N` Obsidian shortcut and its launcher:
 | Condition | Contact | How |
 |---|---|---|
 | Session unrecoverable after Plasma/KWin restart | Self (host owner) | Reboot; if persistent, boot to TTY (`Ctrl+Alt+F3`) and inspect `journalctl --user -b` |
-| Suspected GPU/Wayland driver regression after `dnf upgrade` | Self | Cross-check `~/fedora-linux-development-workstation-notes/fedora-42-to-43-upgrade/` notes before further upgrades |
+| Suspected GPU/Wayland driver regression after `dnf upgrade` | Self | Cross-check `~/Projects/public/fedora-notes/fedora-42-to-43-upgrade/` notes before further upgrades |
 
 ---
 
 ## Related Runbooks
 
-- [`../RUNBOOK.md`](../RUNBOOK.md) — fedora-linux-development-workstation-notes root runbook (index)
+- [`../RUNBOOK.md`](../RUNBOOK.md) — fedora-notes root runbook (index)
 - [`../garage/RUNBOOK.md`](../garage/RUNBOOK.md) — Garage S3 backend
 - `~/ai/fedora/RUNBOOK.md` — Fedora workstation **background automation** (systemd timers)
 - `~/Projects/private/app-configuration/apps/obsidian/RUNBOOK.md` — Obsidian app config
