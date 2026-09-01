@@ -40,7 +40,7 @@ source_path: /home/kinscoe/Projects/public/fedora-notes/kde/RUNBOOK.md
   tray), you need to add/inspect a **global keyboard shortcut**, or you're re-deriving how the
   desktop is wired (session type, package managers, shortcut config locations).
 - **Do NOT use when:** the problem is a specific application (see that app's runbook), a
-  self-hosted container (`/opt/containers/`), or a background automation job (`~/ai/fedora/`).
+  self-hosted container (`/home/containers/`), or a background automation job (`~/ai/fedora/`).
 
 ---
 

@@ -11,7 +11,7 @@
 
 ## Known Conflicts & Their Resolutions
 
-### 1. Python File Server Container (`/opt/containers/home_file_server`)
+### 1. Python File Server Container (`/home/containers/home_file_server`)
 
 **Purpose**: LAN file server. Exposes `/home/kinscoe` as a read-only HTTP browse interface on port 2222. Used to access home directory files from other machines on the local network.
 
@@ -180,7 +180,7 @@ sudo tail -f /var/log/audit/audit.log | grep AVC
 
 | Container | Compose file location | Port | Notes |
 |---|---|---|---|
-| home_file_server | `/opt/containers/home_file_server/` | 2222 | LAN file browse, uses label:disable |
+| home_file_server | `/home/containers/home_file_server/` | 2222 | LAN file browse, uses label:disable |
 
 ---
 
